@@ -1,0 +1,89 @@
+# Each job runs only when its part of the repo changes. Secrets (ANTHROPIC_API_KEY) are masked, protected
+# CI/CD variables, never files in the repo.
+stages:
+  - verifier
+  - evaluer
+
+include:
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+
+# The template runs in a `test` stage this pipeline does not have.
+secret_detection:
+  stage: verifier
+
+.uv:
+  image: ghcr.io/astral-sh/uv:0.12.19-python3.12-bookworm-slim
+  variables:
+    UV_CACHE_DIR: $CI_PROJECT_DIR/.cache/uv
+  cache:
+    key: uv-$CI_COMMIT_REF_SLUG
+    paths: [.cache/uv]
+  before_script:
+    - cd backend
+    - uv sync --locked
+
+backend:
+  extends: .uv
+  stage: verifier
+  script:
+    - uv run ruff check .
+    - uv run ruff format --check .
+    - uv run pytest
+  rules:
+    - changes: [backend/**/*, .gitlab-ci.yml]
+
+app:
+  stage: verifier
+  image: ghcr.io/cirruslabs/flutter:3.47.7
+  script:
+    - cd app
+    - flutter pub get
+    - dart format --set-exit-if-changed lib test
+    - flutter analyze
+    - flutter test
+  rules:
+    - changes: [app/**/*, .gitlab-ci.yml]
+
+firestore-regles:
+  stage: verifier
+  image: node:20-bookworm
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq openjdk-17-jre-headless > /dev/null
+  script:
+    - cd firebase
+    - npm ci
+    - npm test
+  rules:
+    - changes: [firebase/**/*, .gitlab-ci.yml]
+
+# Free and offline: the baseline every model change is compared to.
+eval-regle:
+  extends: .uv
+  stage: evaluer
+  script:
+    - uv run python -m evals.run --extracteur regle --split dev
+    - uv run python -m evals.run --extracteur regle --split test
+  artifacts:
+    paths: [backend/evals/resultats/]
+    expire_in: 30 days
+  rules:
+    - changes: [backend/**/*]
+
+# Paid (about 14 calls): only on merge requests that touch the extraction, and only if the key is set.
+# A single silent error (a missing or late deadline the app does not flag) fails the pipeline.
+# ANTHROPIC_API_KEY must be "masked" but NOT "protected": protected variables never reach merge request
+# pipelines from unprotected branches, so this job would silently never run. Use a key with a low spend limit.
+eval-claude:
+  extends: .uv
+  stage: evaluer
+  script:
+    - uv run python -m evals.run --extracteur claude --split test --max-silencieuses 0
+  artifacts:
+    paths: [backend/evals/resultats/]
+    expire_in: 30 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $ANTHROPIC_API_KEY
+      changes:
+        - backend/src/pli/extracteurs/**/*
+        - backend/src/pli/schema.py
+        - backend/evals/**/*
