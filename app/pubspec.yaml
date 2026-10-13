@@ -1,0 +1,40 @@
+name: pli
+description: "Pli : tes courriers administratifs, compris et rappelés."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  cloud_firestore: ^6.10.0
+  file_picker: ^13.1.0
+  firebase_auth: ^6.7.0
+  firebase_core: ^4.15.0
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  http: ^1.6.0
+  image_picker: ^1.2.4
+  intl: ^0.20.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  fonts:
+    - family: YoungSerif
+      fonts:
+        - asset: assets/polices/young-serif-400.ttf
+    - family: Atkinson
+      fonts:
+        - asset: assets/polices/atkinson-hyperlegible-next-400.ttf
+        - asset: assets/polices/atkinson-hyperlegible-next-600.ttf
+          weight: 600
+        - asset: assets/polices/atkinson-hyperlegible-next-700.ttf
+          weight: 700

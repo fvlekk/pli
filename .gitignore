@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+
+# Node
+node_modules/
+
+# Flutter
+app/.dart_tool/
+app/build/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+
+# Firebase emulators
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Secrets: never commit, see .env.example
+.env
+*.key
+service-account*.json
+backend/evals/resultats/

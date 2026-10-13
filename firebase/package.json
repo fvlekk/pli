@@ -1,0 +1,14 @@
+{
+  "name": "pli-firebase",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project demo-pli \"node --test tests/\"",
+    "emulateurs": "firebase emulators:start --only auth,firestore --project demo-pli"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.2",
+    "firebase": "12.19.0",
+    "firebase-tools": "15.33.0"
+  }
+}

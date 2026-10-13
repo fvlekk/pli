@@ -1,0 +1,54 @@
+rules_version = '2';
+
+// Each user only sees and writes their own deadlines. The backend never writes here: the user confirms
+// the extraction in the app, and the app creates the document. Every change here comes with a test.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function estProprietaire(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function champs() {
+      return ['organisme', 'organismeNom', 'action', 'titre', 'dateLimite', 'montant', 'resume',
+              'aVerifier', 'fait', 'source', 'creeLe'];
+    }
+
+    function echeanceValide(d) {
+      return d.keys().hasAll(champs()) && d.keys().hasOnly(champs())
+        && d.organisme in ['impots', 'caf', 'assurance_maladie', 'urssaf', 'france_travail', 'prefecture',
+                           'antai', 'crous', 'ants', 'mutuelle', 'assurance', 'energie', 'bailleur', 'autre']
+        && d.action in ['payer', 'declarer', 'envoyer_documents', 'renouveler', 'se_presenter', 'demander',
+                        'repondre', 'aucune']
+        && d.organismeNom is string && d.organismeNom.size() <= 120
+        && d.titre is string && d.titre.size() > 0 && d.titre.size() <= 120
+        && d.dateLimite is timestamp
+        && (d.montant == null || (d.montant is number && d.montant >= 0 && d.montant < 1000000))
+        && d.resume is string && d.resume.size() <= 500
+        && d.aVerifier is bool
+        && d.fait is bool
+        && d.source in ['claude', 'regle', 'manuel'];
+    }
+
+    match /users/{uid}/echeances/{id} {
+      allow read: if estProprietaire(uid);
+
+      allow create: if estProprietaire(uid)
+        && echeanceValide(request.resource.data)
+        && request.resource.data.creeLe == request.time
+        && request.resource.data.fait == false;
+
+      // The user can tick it done or correct what was read; origin and creation date stay as they were.
+      allow update: if estProprietaire(uid)
+        && echeanceValide(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['fait', 'titre', 'dateLimite', 'montant', 'aVerifier']);
+
+      allow delete: if estProprietaire(uid);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
