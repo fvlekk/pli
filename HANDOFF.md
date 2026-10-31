@@ -6,7 +6,7 @@ application to Buddy (full-stack & AI work-study role).
 
 ## State (2026-10-12)
 - **Works locally, end to end**: emulators + backend + Flutter web. Read a sample letter, check it, save it
-  to Firestore, and see it in the folded-letter home. Verified with Playwright screenshots (`docs/captures/`).
+  to Firestore, and see it on the home screen. Verified with Playwright screenshots (`docs/captures/`).
 - Backend: 62 pytest, ruff clean. Firestore rules: 27 tests on the emulator. App: 27 tests, analyzer clean.
 - Independent review (reviewer agent) done on 2026-10-12: every finding verified in the code, then fixed with a
   test (list in README « What review caught »).
@@ -20,7 +20,8 @@ application to Buddy (full-stack & AI work-study role).
 1. With an Anthropic key: `cd backend && uv run python -m evals.run --extracteur claude --split test` (~14 calls).
    Paste the scores into the README table, then compare `PLI_EFFORT=low` against `medium`.
 2. Mirror to GitLab so `.gitlab-ci.yml` runs too (the stack Buddy uses).
-3. Record the 30 s motion video from the real screens: the postmark landing (`CoupDeTampon`) is the hero shot.
+3. Retake `docs/captures/` after the Buddy-style restyle (the PNGs still show the old postmark design).
+4. Record the 30 s motion video from the real screens.
 
 ## À confirmer / open
 - npm audit: 17 findings, all in dev tooling (firebase-tools, emulator test libs). The "fixes" are downgrades

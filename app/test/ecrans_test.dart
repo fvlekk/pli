@@ -47,6 +47,12 @@ void main() {
     expect(find.text('Fait (1)'), findsOneWidget);
     expect(find.text('Envoyer l\'attestation'), findsNothing, reason: 'done items stay folded');
     expect(find.text('90 €'), findsWidgets);
+    expect(find.text('À FAIRE EN PREMIER'), findsOneWidget, reason: 'only the most pressing card is highlighted');
+    expect(
+      tester.getTopLeft(find.text('À FAIRE EN PREMIER')).dy,
+      lessThan(tester.getTopLeft(find.text('Payer l\'amende')).dy),
+      reason: 'the highlighted card is the late one, above this week\'s',
+    );
   });
 
   testWidgets('a letter is read, checked, then saved', (tester) async {

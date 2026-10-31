@@ -6,9 +6,7 @@ import '../outils/dates.dart';
 import '../services/depot_echeances.dart';
 import '../services/lecteur_courrier.dart';
 import '../theme.dart';
-import '../widgets/cachet.dart';
-import '../widgets/feuille_pliee.dart';
-import '../widgets/ligne_echeance.dart';
+import '../widgets/carte_echeance.dart';
 import 'ajout.dart';
 
 class EcranAccueil extends StatelessWidget {
@@ -47,7 +45,7 @@ class EcranAccueil extends StatelessWidget {
         ),
       ),
       bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(Espaces.m, Espaces.s, Espaces.m, Espaces.m),
+        minimum: const EdgeInsets.fromLTRB(Espaces.l, Espaces.s, Espaces.l, Espaces.m),
         child: FilledButton.icon(
           onPressed: () => _ajouter(context),
           icon: const Icon(Icons.add),
@@ -67,49 +65,54 @@ class _Contenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final aFaire = echeances.where((e) => !e.fait).toList();
+    final aFaire = echeances.where((e) => !e.fait).toList()..sort((a, b) => a.dateLimite.compareTo(b.dateLimite));
     final faites = echeances.where((e) => e.fait).toList();
     final parHorizon = <Horizon, List<Echeance>>{for (final h in Horizon.values) h: []};
     for (final e in aFaire) {
       parHorizon[horizonDe(joursRestants(e.dateLimite, aujourdhui))]!.add(e);
     }
 
-    final volets = <Widget>[
-      for (final (horizon, titre) in [
-        (Horizon.enRetard, 'En retard'),
-        (Horizon.cetteSemaine, 'Cette semaine'),
-        (Horizon.ceMois, 'Ce mois-ci'),
-        (Horizon.plusTard, 'Plus tard'),
-      ])
-        if (parHorizon[horizon]!.isNotEmpty)
-          Volet(
-            titre: titre,
-            couleurTitre: horizon == Horizon.enRetard ? Couleurs.cire : Couleurs.encre,
-            enfants: [for (final e in parHorizon[horizon]!) _ligne(context, e)],
-          ),
-    ];
+    final sections = [
+      (Horizon.enRetard, 'En retard'),
+      (Horizon.cetteSemaine, 'Cette semaine'),
+      (Horizon.ceMois, 'Ce mois-ci'),
+      (Horizon.plusTard, 'Plus tard'),
+    ].where((s) => parHorizon[s.$1]!.isNotEmpty).toList();
+    // Sorted by date, so the very first one is what to do first.
+    final premiere = sections.isEmpty ? null : parHorizon[sections.first.$1]!.first;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(Espaces.m, Espaces.l, Espaces.m, Espaces.l),
+      padding: const EdgeInsets.fromLTRB(Espaces.l, Espaces.m, Espaces.l, Espaces.l),
       children: [
-        const Text('Pli', style: Textes.marque),
-        if (volets.isNotEmpty) ...[
+        const Text('pli', style: Textes.marque),
+        const SizedBox(height: Espaces.l),
+        const Text('Tes échéances 📬', style: Textes.titre),
+        if (sections.isNotEmpty) ...[
           const SizedBox(height: Espaces.xs),
           Text(_resume(parHorizon), style: Textes.corps.copyWith(color: Couleurs.encreDouce)),
         ],
-        const SizedBox(height: Espaces.l),
-        if (volets.isEmpty) const _Vide() else FeuillePliee(volets: volets),
-        if (faites.isNotEmpty) ...[
+        if (sections.isEmpty) const _Vide(),
+        for (final (horizon, titre) in sections) ...[
           const SizedBox(height: Espaces.l),
+          Semantics(
+            header: true,
+            child: Text(
+              titre,
+              style: Textes.section.copyWith(color: horizon == Horizon.enRetard ? Couleurs.rouge : null),
+            ),
+          ),
+          const SizedBox(height: Espaces.m),
+          for (final e in parHorizon[horizon]!) _carte(context, e, enAvant: identical(e, premiere)),
+        ],
+        if (faites.isNotEmpty)
           Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
             child: ExpansionTile(
               tilePadding: EdgeInsets.zero,
-              title: Text('Fait (${faites.length})', style: Textes.volet),
-              children: [for (final e in faites) _ligne(context, e)],
+              title: Text('Fait (${faites.length})', style: Textes.section),
+              children: [for (final e in faites) _carte(context, e)],
             ),
           ),
-        ],
       ],
     );
   }
@@ -122,12 +125,13 @@ class _Contenu extends StatelessWidget {
     return semaine == 1 ? 'Une chose à faire cette semaine.' : '$semaine choses à faire cette semaine.';
   }
 
-  Widget _ligne(BuildContext context, Echeance e) => LigneEcheance(
+  Widget _carte(BuildContext context, Echeance e, {bool enAvant = false}) => CarteEcheance(
     echeance: e,
     aujourdhui: aujourdhui,
+    enAvant: enAvant,
     onTap: () => showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Couleurs.feuille,
+      backgroundColor: Couleurs.fond,
       showDragHandle: true,
       builder: (_) => _Detail(echeance: e, depot: depot),
     ),
@@ -179,9 +183,11 @@ class _Detail extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(echeance.titre, style: Textes.titre),
+            Pastille('${emojiOrganisme(echeance.organisme)} ${libelleOrganisme(echeance.organisme)}'),
             const SizedBox(height: Espaces.s),
-            Text('${libelleOrganisme(echeance.organisme)}, ${echeance.organismeNom}', style: Textes.discret),
+            Text(echeance.titre, style: Textes.section),
+            const SizedBox(height: Espaces.xs),
+            Text(echeance.organismeNom, style: Textes.discret),
             const SizedBox(height: Espaces.m),
             Text('Avant le ${dateLongue(echeance.dateLimite)}', style: Textes.corps),
             if (echeance.montant != null) Text('Montant : ${euros(echeance.montant!)}', style: Textes.corps),
@@ -206,27 +212,26 @@ class _Vide extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Espaces.xl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      margin: const EdgeInsets.only(top: Espaces.l),
+      padding: const EdgeInsets.all(Espaces.l),
+      decoration: decorationCarte(fond: Couleurs.mentheFond, bord: Couleurs.mentheFond),
+      child: const Row(
         children: [
-          const Cachet(
-            nombre: '0',
-            unite: 'en attente',
-            couleur: Couleurs.tampon,
-            haut: 'rien à faire',
-            bas: 'pli',
-            taille: 150,
-            ondes: true,
-            semantique: 'Aucune échéance en attente',
-          ),
-          const SizedBox(height: Espaces.l),
-          const Text('Aucun courrier en attente', style: Textes.titre),
-          const SizedBox(height: Espaces.s),
-          const Text(
-            'Ajoute le prochain dès qu\'il arrive : Pli te dit quoi faire, et avant quand.',
-            style: Textes.corps,
+          Text('🏆', style: TextStyle(fontSize: 32)),
+          SizedBox(width: Espaces.m),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Aucun courrier en attente', style: Textes.ligne),
+                SizedBox(height: Espaces.xs),
+                Text(
+                  'Ajoute le prochain dès qu\'il arrive : Pli te dit quoi faire, et avant quand.',
+                  style: Textes.discret,
+                ),
+              ],
+            ),
           ),
         ],
       ),

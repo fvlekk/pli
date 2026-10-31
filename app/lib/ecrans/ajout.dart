@@ -7,7 +7,6 @@ import '../exemples.dart';
 import '../services/depot_echeances.dart';
 import '../services/lecteur_courrier.dart';
 import '../theme.dart';
-import '../widgets/feuille_pliee.dart';
 import 'verification.dart';
 
 const _typesFichier = {
@@ -96,13 +95,13 @@ class _EcranAjoutState extends State<EcranAjout> {
       body: SafeArea(
         child: Column(
           children: [
-            if (_enCours) const LinearProgressIndicator(color: Couleurs.tampon, backgroundColor: Couleurs.pli),
+            if (_enCours) const LinearProgressIndicator(backgroundColor: Couleurs.corailPale),
             Expanded(
               child: AbsorbPointer(
                 absorbing: _enCours,
                 child: ListView(
                   controller: _defilement,
-                  padding: const EdgeInsets.all(Espaces.m),
+                  padding: const EdgeInsets.fromLTRB(Espaces.l, Espaces.s, Espaces.l, Espaces.l),
                   children: [
                     Text(
                       _enCours
@@ -113,17 +112,18 @@ class _EcranAjoutState extends State<EcranAjout> {
                     ),
                     if (_erreur != null) ...[const SizedBox(height: Espaces.m), _Alerte(texte: _erreur!)],
                     const SizedBox(height: Espaces.l),
-                    FeuillePliee(
-                      volets: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
                         if (!kIsWeb)
                           _Choix(
-                            icone: Icons.photo_camera_outlined,
+                            emoji: '📸',
                             titre: 'Prendre une photo',
                             detail: 'Le courrier à plat, bien éclairé',
                             onTap: _photographier,
                           ),
                         _Choix(
-                          icone: Icons.upload_file_outlined,
+                          emoji: '📄',
                           titre: 'Importer un PDF ou une image',
                           detail: '5 Mo maximum',
                           onTap: _importer,
@@ -132,14 +132,14 @@ class _EcranAjoutState extends State<EcranAjout> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             _Choix(
-                              icone: Icons.content_paste_outlined,
+                              emoji: '📋',
                               titre: 'Coller le texte',
                               detail: 'Depuis un mail ou un espace en ligne',
                               onTap: () => setState(() => _texteOuvert = !_texteOuvert),
                             ),
                             if (_texteOuvert)
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(Espaces.m, 0, Espaces.m, Espaces.m),
+                                padding: const EdgeInsets.only(top: Espaces.m),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
@@ -168,15 +168,16 @@ class _EcranAjoutState extends State<EcranAjout> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: Espaces.xl),
-                    const Text('Pas de courrier sous la main ?', style: Textes.volet),
-                    const SizedBox(height: Espaces.s),
+                    const SizedBox(height: Espaces.l),
+                    const Text('Pas de courrier sous la main ?', style: Textes.section),
+                    const SizedBox(height: Espaces.xs),
+                    const Text('Essaie avec un courrier fictif.', style: Textes.discret),
+                    const SizedBox(height: Espaces.m),
                     for (final exemple in exemples)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.mail_outline, color: Couleurs.tampon),
-                        title: Text(exemple.titre, style: Textes.corps),
-                        subtitle: const Text('Courrier fictif', style: Textes.discret),
+                      _Choix(
+                        emoji: '✉️',
+                        titre: exemple.titre,
+                        detail: 'Courrier fictif',
                         onTap: () => _lire(CourrierTexte(exemple.texte)),
                       ),
                   ],
@@ -190,34 +191,50 @@ class _EcranAjoutState extends State<EcranAjout> {
   }
 }
 
+/// An option as a Buddy-style card: an emoji in a soft circle, a title and a hint.
 class _Choix extends StatelessWidget {
-  const _Choix({required this.icone, required this.titre, required this.detail, required this.onTap});
+  const _Choix({required this.emoji, required this.titre, required this.detail, required this.onTap});
 
-  final IconData icone;
+  final String emoji;
   final String titre;
   final String detail;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(Espaces.m),
-        child: Row(
-          children: [
-            Icon(icone, color: Couleurs.tampon, size: 28),
-            const SizedBox(width: Espaces.m),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(titre, style: Textes.ligne),
-                  Text(detail, style: Textes.discret),
-                ],
-              ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Espaces.m),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(Rayons.carte),
+          child: Ink(
+            decoration: decorationCarte(),
+            padding: const EdgeInsets.all(Espaces.m),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(color: Couleurs.corailPale, shape: BoxShape.circle),
+                  child: Text(emoji, style: const TextStyle(fontSize: 22)),
+                ),
+                const SizedBox(width: Espaces.m),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(titre, style: Textes.ligne),
+                      Text(detail, style: Textes.discret),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: Couleurs.encreDouce),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -235,10 +252,7 @@ class _Alerte extends StatelessWidget {
       liveRegion: true,
       child: Container(
         padding: const EdgeInsets.all(Espaces.m),
-        decoration: const BoxDecoration(
-          color: Couleurs.feuille,
-          border: Border(left: BorderSide(color: Couleurs.cire, width: 4)),
-        ),
+        decoration: decorationCarte(fond: Couleurs.corailPale, bord: Couleurs.corailPale),
         child: Text(texte, style: Textes.corps),
       ),
     );

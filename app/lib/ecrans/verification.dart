@@ -7,7 +7,7 @@ import '../modeles/libelles.dart';
 import '../outils/dates.dart';
 import '../services/depot_echeances.dart';
 import '../theme.dart';
-import '../widgets/cachet.dart';
+import '../widgets/carte_echeance.dart';
 
 /// The user checks what was read before anything is saved. This screen is the verification step.
 class EcranVerification extends StatefulWidget {
@@ -114,7 +114,6 @@ class _EcranVerificationState extends State<EcranVerification> {
   @override
   Widget build(BuildContext context) {
     final jours = _date == null ? null : joursRestants(_date!, widget.maintenant());
-    final rebours = jours == null ? (nombre: '?', unite: 'date à choisir') : compteARebours(jours);
     final peutEnregistrer = _date != null && _titre.text.trim().isNotEmpty && !_enregistrement;
 
     return Scaffold(
@@ -123,21 +122,7 @@ class _EcranVerificationState extends State<EcranVerification> {
         child: ListView(
           padding: const EdgeInsets.all(Espaces.m),
           children: [
-            CoupDeTampon(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Cachet(
-                  nombre: rebours.nombre,
-                  unite: rebours.unite,
-                  couleur: jours != null && estUrgent(jours) ? Couleurs.cire : Couleurs.tampon,
-                  haut: _date == null ? 'à dater' : DateFormatCachet.date(_date!),
-                  bas: libelleOrganisme(_l.organisme),
-                  taille: 150,
-                  ondes: true,
-                  semantique: jours == null ? 'Pas de date trouvée' : '${rebours.nombre} ${rebours.unite}',
-                ),
-              ),
-            ),
+            _EnTete(lecture: _l, date: _date, jours: jours),
             const SizedBox(height: Espaces.l),
             if (_l.aVerifier) ...[_AVerifier(raison: _l.raisonVerification), const SizedBox(height: Espaces.m)],
             if (!_rappelQuandMeme) ..._rienAFaire() else ..._formulaire(),
@@ -214,14 +199,11 @@ class _AVerifier extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(Espaces.m),
-      decoration: const BoxDecoration(
-        color: Couleurs.feuille,
-        border: Border(left: BorderSide(color: Couleurs.cire, width: 4)),
-      ),
+      decoration: decorationCarte(fond: Couleurs.corailPale, bord: Couleurs.corailPale),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('À vérifier', style: Textes.ligne.copyWith(color: Couleurs.cire)),
+          Text('À vérifier', style: Textes.ligne.copyWith(color: Couleurs.rouge)),
           const SizedBox(height: Espaces.xs),
           Text(_phrase(raison), style: Textes.corps),
         ],
@@ -235,7 +217,46 @@ class _AVerifier extends StatelessWidget {
   }
 }
 
-/// "18 oct. 2026" for the postmark's top arc.
-abstract final class DateFormatCachet {
-  static String date(DateTime d) => '${dateCourte(d)} ${d.year}';
+/// The lilac card on top: who sent it, and how many days are left.
+class _EnTete extends StatelessWidget {
+  const _EnTete({required this.lecture, required this.date, required this.jours});
+
+  final Lecture lecture;
+  final DateTime? date;
+  final int? jours;
+
+  @override
+  Widget build(BuildContext context) {
+    final pourInfo = lecture.action == 'aucune' && date == null;
+    return Container(
+      padding: const EdgeInsets.all(Espaces.m),
+      decoration: decorationCarte(fond: Couleurs.lilas, bord: Couleurs.lilasBord),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('CE QUE PLI A LU', style: Textes.surtitre),
+          const SizedBox(height: Espaces.s),
+          Row(
+            children: [
+              if (pourInfo)
+                const Pastille('Pour info', couleur: Couleurs.menthe, fond: Couleurs.mentheFond)
+              else
+                PastilleRebours(jours: jours),
+              const SizedBox(width: Espaces.s),
+              Flexible(
+                child: Pastille('${emojiOrganisme(lecture.organisme)} ${libelleOrganisme(lecture.organisme)}'),
+              ),
+            ],
+          ),
+          const SizedBox(height: Espaces.s),
+          Text(
+            date != null
+                ? 'Avant le ${dateCourte(date!)} ${date!.year}'
+                : (pourInfo ? lecture.organismeNom : 'Pas de date trouvée'),
+            style: Textes.section,
+          ),
+        ],
+      ),
+    );
+  }
 }

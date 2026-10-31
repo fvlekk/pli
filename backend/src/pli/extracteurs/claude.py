@@ -62,11 +62,9 @@ class ExtracteurClaude:
 
     def extraire(self, courrier: Courrier, recu_le: date) -> Resultat:
         try:
-            reponse = self.client.beta.messages.parse(
+            reponse = self.client.messages.parse(
                 model=self.modele,
                 max_tokens=16000,
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
                 output_config={"effort": self.effort},
                 output_format=Extraction,
                 system=[{"type": "text", "text": SYSTEME, "cache_control": {"type": "ephemeral"}}],

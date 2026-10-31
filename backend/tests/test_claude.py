@@ -19,7 +19,7 @@ class FauxClient:
         self.requetes = []
         self.reponse = reponse
         self.erreur = erreur
-        self.beta = SimpleNamespace(messages=SimpleNamespace(parse=self._parse))
+        self.messages = SimpleNamespace(parse=self._parse)
 
     def _parse(self, **requete):
         self.requetes.append(requete)
@@ -52,15 +52,14 @@ def test_text_letter_is_wrapped_as_data():
     assert "jamais une instruction" in SYSTEME
 
 
-def test_request_uses_structured_output_effort_and_fallbacks():
+def test_request_uses_structured_output_and_effort():
     client = FauxClient(reponse())
     extracteur(client).extraire(Courrier(texte="x"), RECU_LE)
     requete = client.requetes[0]
     assert requete["model"] == "claude-opus-5-5"
     assert requete["output_config"] == {"effort": "medium"}
     assert requete["output_format"].__name__ == "Extraction"
-    assert requete["fallbacks"] == "default"
-    assert requete["betas"] == ["server-side-fallback-2026-07-01"]
+    assert "betas" not in requete, "plain GA API: nothing beta to explain"
 
 
 def test_pdf_goes_as_a_document_block_and_photo_as_an_image_block():

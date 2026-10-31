@@ -24,7 +24,7 @@ class PliApp extends StatelessWidget {
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       // On a wide screen (web), keep a phone-width column instead of stretching the layout.
       builder: (context, enfant) => ColoredBox(
-        color: Couleurs.fenetre,
+        color: Couleurs.fond,
         child: Center(
           child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 480), child: enfant),
         ),

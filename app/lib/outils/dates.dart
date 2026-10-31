@@ -28,10 +28,13 @@ String euros(double montant) {
   return format.format(montant).replaceAll(' ', ' ');
 }
 
-/// What the postmark says: "aujourd'hui", "demain", "3 jours", "en retard".
-({String nombre, String unite}) compteARebours(int jours) {
-  if (jours < 0) return (nombre: '!', unite: 'en retard');
-  if (jours == 0) return (nombre: '0', unite: "aujourd'hui");
-  if (jours == 1) return (nombre: '1', unite: 'jour');
-  return (nombre: '$jours', unite: 'jours');
-}
+/// "05/11/26", like the dates on Buddy's cards.
+String dateChiffres(DateTime d) => DateFormat('dd/MM/yy', 'fr').format(d);
+
+/// The countdown pill: "En retard", "Aujourd'hui", "Demain", "Dans 3 jours".
+String rebours(int jours) => switch (jours) {
+  < 0 => 'En retard',
+  0 => "Aujourd'hui",
+  1 => 'Demain',
+  _ => 'Dans $jours jours',
+};

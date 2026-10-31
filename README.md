@@ -7,13 +7,14 @@ much. You check it, and it goes into a list sorted by urgency.
 Flutter app · Python backend on Cloud Run · Firestore · Claude for reading · GitLab CI.
 
 <p>
-  <img src="docs/captures/accueil.png" width="230" alt="Home: deadlines in three panels of a folded letter">
+  <img src="docs/captures/accueil.png" width="230" alt="Home: deadlines grouped by horizon">
   <img src="docs/captures/verification.png" width="230" alt="Checking what was read before saving">
-  <img src="docs/captures/accueil-vide.png" width="230" alt="Empty state with the postmark">
+  <img src="docs/captures/accueil-vide.png" width="230" alt="Empty state">
 </p>
 
-The home screen is a letter folded in three: *this week*, *this month*, *later*. Each deadline gets a
-postmark that counts down the days. It turns sealing-wax red under a week.
+The home screen groups deadlines by horizon: *late*, *this week*, *this month*, *later*. Each one is a card
+with a countdown pill (coral under a week) and the sender's pill; the most pressing one is highlighted in
+lilac. The visual style (Baloo 2, coral accent, rounded cards, pills) follows Buddy's app.
 
 ## Decisions that shape the code
 

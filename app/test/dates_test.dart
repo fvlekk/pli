@@ -31,13 +31,14 @@ void main() {
   });
 
   test('countdown wording', () {
-    expect(compteARebours(-2).unite, 'en retard');
-    expect(compteARebours(0).unite, "aujourd'hui");
-    expect(compteARebours(1), (nombre: '1', unite: 'jour'));
-    expect(compteARebours(12), (nombre: '12', unite: 'jours'));
+    expect(rebours(-2), 'En retard');
+    expect(rebours(0), "Aujourd'hui");
+    expect(rebours(1), 'Demain');
+    expect(rebours(12), 'Dans 12 jours');
   });
 
   test('short French dates', () {
     expect(dateCourte(DateTime(2026, 11, 15)), '15 nov.');
+    expect(dateChiffres(DateTime(2026, 11, 5)), '05/11/26');
   });
 }
