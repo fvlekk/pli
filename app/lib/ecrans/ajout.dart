@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../config.dart';
 import '../exemples.dart';
 import '../services/depot_echeances.dart';
 import '../services/lecteur_courrier.dart';
@@ -184,6 +185,15 @@ class _EcranAjoutState extends State<EcranAjout> {
                 ),
               ),
             ),
+            if (Config.demo)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(Espaces.m, Espaces.s, Espaces.m, Espaces.m),
+                child: Text(
+                  'Démo : la lecture réelle passe par le backend avec Claude.',
+                  style: Textes.discret,
+                  textAlign: TextAlign.center,
+                ),
+              ),
           ],
         ),
       ),

@@ -6,8 +6,13 @@ much. You check it, and it goes into a list sorted by urgency.
 
 Flutter app · Python backend on Cloud Run · Firestore · Claude for reading · GitLab CI.
 
+**Live demo: [pli-demo.vercel.app](https://pli-demo.vercel.app).** It is built with `--dart-define=PLI_DEMO=true`:
+no Firebase and no backend, deadlines stay in memory, and only the three sample letters are read, with the
+answers the Claude extractor gives on them.
+
 <p>
   <img src="docs/captures/accueil.png" width="230" alt="Home: deadlines grouped by horizon">
+  <img src="docs/captures/ajout.png" width="230" alt="Adding a letter: import, paste or try a sample">
   <img src="docs/captures/verification.png" width="230" alt="Checking what was read before saving">
   <img src="docs/captures/accueil-vide.png" width="230" alt="Empty state">
 </p>
@@ -110,7 +115,7 @@ Without `ANTHROPIC_API_KEY` the backend uses the rule extractor. The add screen 
 |---|---|---|
 | Backend | `uv run ruff check . && uv run ruff format --check . && uv run pytest` | 62 tests |
 | Firestore rules | `npm test` (emulator) | 27 tests |
-| App | `dart format --set-exit-if-changed lib test && flutter analyze && flutter test` | 27 tests |
+| App | `dart format --set-exit-if-changed lib test && flutter analyze && flutter test` | 33 tests |
 | Eval | `uv run python -m evals.run --extracteur regle --split test` | see above |
 
 [.gitlab-ci.yml](.gitlab-ci.yml) runs each part when it changes, plus GitLab secret detection. The paid Claude

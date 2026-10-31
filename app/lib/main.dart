@@ -6,6 +6,8 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'app.dart';
 import 'config.dart';
+import 'demo/depot_memoire.dart';
+import 'demo/lecteur_demo.dart';
 import 'services/depot_echeances.dart';
 import 'services/lecteur_courrier.dart';
 import 'services/session.dart';
@@ -13,6 +15,11 @@ import 'services/session.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('fr');
+  if (Config.demo) {
+    runApp(PliApp(depot: DepotMemoire.demo(DateTime.now()), lecteur: LecteurDemo()));
+    return;
+  }
+
   await Firebase.initializeApp(options: Config.optionsFirebase);
   if (Config.emulateurs) {
     await FirebaseAuth.instance.useAuthEmulator(Config.hoteEmulateurs, 9099);
