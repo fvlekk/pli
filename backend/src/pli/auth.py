@@ -4,6 +4,8 @@ from typing import Protocol
 
 import firebase_admin
 from firebase_admin import auth as firebase_auth
+from firebase_admin import credentials
+from google.auth.credentials import AnonymousCredentials
 
 
 class JetonInvalide(Exception):
@@ -18,6 +20,17 @@ class VerificateurJeton(Protocol):
     def uid(self, jeton: str) -> str: ...
 
 
+class _SansCompte(credentials.Base):
+    """Checking an ID token only needs Google's public keys and the project id, never a service account.
+
+    Without it, firebase-admin looks for Application Default Credentials: they exist on Cloud Run but not on
+    another host (Render), where every request failed with DefaultCredentialsError.
+    """
+
+    def get_credential(self):
+        return AnonymousCredentials()
+
+
 class VerificateurFirebase:
     """Checks the token's signature, expiry and audience (the Firebase project).
 
@@ -29,7 +42,11 @@ class VerificateurFirebase:
         try:
             firebase_admin.get_app()
         except ValueError:
-            firebase_admin.initialize_app(options={"projectId": projet} if projet else None)
+            # No project id: keep the default credentials, on Google Cloud they also supply the project.
+            if projet:
+                firebase_admin.initialize_app(credential=_SansCompte(), options={"projectId": projet})
+            else:
+                firebase_admin.initialize_app()
 
     def uid(self, jeton: str) -> str:
         try:
