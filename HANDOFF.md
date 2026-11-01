@@ -40,3 +40,7 @@ application to Buddy (full-stack & AI work-study role).
   agreement and a privacy notice that says so. The app copy only claims that *Pli* does not store the letter.
 - Reminders (FCM push at D-7 / D-1) are not built: today the app is the reminder.
 - Rule extractor titles are generic (« Payer (amende) »). Claude writes real ones.
+- Web only: some emoji (📬, 🏠, ⚡, 🏆) render black and white, because Flutter's CanvasKit falls back to a
+  symbols font for them. Neither `fontFamilyFallback: ['Noto Color Emoji']` nor U+FE0F fixed it. Native
+  Android/iOS use the system color emoji.
+- `feat/demo-web` (pushed) is the demo on the old design, superseded by `style-buddy-simplification`: delete it.
