@@ -10,6 +10,10 @@ import '../services/lecteur_courrier.dart';
 import '../theme.dart';
 import 'verification.dart';
 
+/// Picking or reading a file can fail on a phone (permission, a huge photo, browser quirks): say so, never stay
+/// silent.
+const _fichierIllisible = 'Impossible d\'ouvrir ce fichier. Réessaie, ou colle le texte du courrier.';
+
 const _typesFichier = {
   'pdf': 'application/pdf',
   'png': 'image/png',
@@ -73,20 +77,34 @@ class _EcranAjoutState extends State<EcranAjout> {
   }
 
   Future<void> _importer() async {
-    final fichier = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: _typesFichier.keys.toList());
-    if (fichier == null) return;
-    final type = _typesFichier[fichier.extension?.toLowerCase()];
-    if (type == null) {
-      _signaler('Choisis un PDF ou une image (PNG, JPEG, WebP).');
+    final CourrierFichier courrier;
+    try {
+      final fichier = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: _typesFichier.keys.toList());
+      if (fichier == null || !mounted) return;
+      final type = _typesFichier[fichier.extension?.toLowerCase()];
+      if (type == null) {
+        _signaler('Choisis un PDF ou une image (PNG, JPEG, WebP).');
+        return;
+      }
+      courrier = CourrierFichier(mediaType: type, octets: await fichier.readAsBytes());
+    } catch (_) {
+      if (mounted) _signaler(_fichierIllisible);
       return;
     }
-    await _lire(CourrierFichier(mediaType: type, octets: await fichier.readAsBytes()));
+    await _lire(courrier);
   }
 
   Future<void> _photographier() async {
-    final photo = await ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 2000, imageQuality: 80);
-    if (photo == null) return;
-    await _lire(CourrierFichier(mediaType: 'image/jpeg', octets: await photo.readAsBytes()));
+    final CourrierFichier courrier;
+    try {
+      final photo = await ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 2000, imageQuality: 80);
+      if (photo == null) return;
+      courrier = CourrierFichier(mediaType: 'image/jpeg', octets: await photo.readAsBytes());
+    } catch (_) {
+      if (mounted) _signaler(_fichierIllisible);
+      return;
+    }
+    await _lire(courrier);
   }
 
   @override
