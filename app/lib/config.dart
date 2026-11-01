@@ -5,6 +5,9 @@ import 'package:firebase_core/firebase_core.dart';
 abstract final class Config {
   static const emulateurs = bool.fromEnvironment('PLI_EMULATEURS');
 
+  /// Public web demo: no Firebase, no backend. Deadlines live in memory and only the sample letters are read.
+  static const demo = bool.fromEnvironment('PLI_DEMO');
+
   /// 127.0.0.1 for web and iOS simulator, 10.0.2.2 for the Android emulator.
   static const hoteEmulateurs = String.fromEnvironment('PLI_HOTE_EMULATEURS', defaultValue: '127.0.0.1');
 

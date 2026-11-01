@@ -28,13 +28,14 @@ flutter:
   uses-material-design: true
 
   fonts:
-    - family: YoungSerif
+    - family: Baloo2
       fonts:
-        - asset: assets/polices/young-serif-400.ttf
-    - family: Atkinson
-      fonts:
-        - asset: assets/polices/atkinson-hyperlegible-next-400.ttf
-        - asset: assets/polices/atkinson-hyperlegible-next-600.ttf
+        - asset: assets/polices/baloo2-400.ttf
+        - asset: assets/polices/baloo2-500.ttf
+          weight: 500
+        - asset: assets/polices/baloo2-600.ttf
           weight: 600
-        - asset: assets/polices/atkinson-hyperlegible-next-700.ttf
+        - asset: assets/polices/baloo2-700.ttf
           weight: 700
+        - asset: assets/polices/baloo2-800.ttf
+          weight: 800

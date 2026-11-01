@@ -6,14 +6,20 @@ much. You check it, and it goes into a list sorted by urgency.
 
 Flutter app · Python backend on Cloud Run · Firestore · Claude for reading · GitLab CI.
 
+**Live demo: [pli-demo.vercel.app](https://pli-demo.vercel.app).** It is built with `--dart-define=PLI_DEMO=true`:
+no Firebase and no backend, deadlines stay in memory, and only the three sample letters are read, with the
+answers the Claude extractor gives on them.
+
 <p>
-  <img src="docs/captures/accueil.png" width="230" alt="Home: deadlines in three panels of a folded letter">
+  <img src="docs/captures/accueil.png" width="230" alt="Home: deadlines grouped by horizon">
+  <img src="docs/captures/ajout.png" width="230" alt="Adding a letter: import, paste or try a sample">
   <img src="docs/captures/verification.png" width="230" alt="Checking what was read before saving">
-  <img src="docs/captures/accueil-vide.png" width="230" alt="Empty state with the postmark">
+  <img src="docs/captures/accueil-vide.png" width="230" alt="Empty state">
 </p>
 
-The home screen is a letter folded in three: *this week*, *this month*, *later*. Each deadline gets a
-postmark that counts down the days. It turns sealing-wax red under a week.
+The home screen groups deadlines by horizon: *late*, *this week*, *this month*, *later*. Each one is a card
+with a countdown pill (coral under a week) and the sender's pill; the most pressing one is highlighted in
+lilac. The visual style (Baloo 2, coral accent, rounded cards, pills) follows Buddy's app.
 
 ## Decisions that shape the code
 
@@ -109,7 +115,7 @@ Without `ANTHROPIC_API_KEY` the backend uses the rule extractor. The add screen 
 |---|---|---|
 | Backend | `uv run ruff check . && uv run ruff format --check . && uv run pytest` | 62 tests |
 | Firestore rules | `npm test` (emulator) | 27 tests |
-| App | `dart format --set-exit-if-changed lib test && flutter analyze && flutter test` | 27 tests |
+| App | `dart format --set-exit-if-changed lib test && flutter analyze && flutter test` | 33 tests |
 | Eval | `uv run python -m evals.run --extracteur regle --split test` | see above |
 
 [.gitlab-ci.yml](.gitlab-ci.yml) runs each part when it changes, plus GitLab secret detection. The paid Claude

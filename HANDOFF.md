@@ -4,10 +4,19 @@
 Prototype on a Flutter, Python, Firestore, Google Cloud, GitLab CI and Claude Code stack, built for a job
 application to Buddy (full-stack & AI work-study role).
 
-## State (2026-10-12)
+## State (2026-11-01)
+- **Web demo live: https://pli-demo.vercel.app** (Vercel project `pli-demo`, branch
+  `style-buddy-simplification`). Flag `PLI_DEMO=true`: no Firebase, no backend. `app/lib/demo/` holds an in-memory store (3 made-up deadlines: late,
+  this week, this month) and a reader that answers the 3 sample letters only. App: 33 tests, analyzer clean;
+  every demo screen checked at 390 px. The bill reads 11 Nov (« avant le 12 » = X−1, the rule of
+  `feat/eval-convention-sonnet-new-letters`).
+- **Buddy restyle applied (2026-11-01)**: `pli-style-buddy.patch` (Baloo 2, coral, cards, pills, lilac « À FAIRE EN
+  PREMIER » card; postmark, folded sheet and stamp animation removed; `messages.parse`; simpler rate limiter).
+  Its Dart had never compiled: fixed a pill-row overflow on large text and an ambiguous test finder.
+  The Claude eval was not rerun after the `messages.parse` change (paid API, no go).
 - **Works locally, end to end**: emulators + backend + Flutter web. Read a sample letter, check it, save it
-  to Firestore, and see it in the folded-letter home. Verified with Playwright screenshots (`docs/captures/`).
-- Backend: 62 pytest, ruff clean. Firestore rules: 27 tests on the emulator. App: 27 tests, analyzer clean.
+  to Firestore, and see it on the home screen. Verified with Playwright screenshots (`docs/captures/`).
+- Backend: 62 pytest, ruff clean. Firestore rules: 27 tests on the emulator. App: 33 tests, analyzer clean.
 - Independent review (reviewer agent) done on 2026-10-12: every finding verified in the code, then fixed with a
   test (list in README « What review caught »).
 - Eval: the rule extractor scores 9/10 on `dev` and 6/14 on `test`, with 1 silent error (an Urssaf reminder).
@@ -20,7 +29,7 @@ application to Buddy (full-stack & AI work-study role).
 1. With an Anthropic key: `cd backend && uv run python -m evals.run --extracteur claude --split test` (~14 calls).
    Paste the scores into the README table, then compare `PLI_EFFORT=low` against `medium`.
 2. Mirror to GitLab so `.gitlab-ci.yml` runs too (the stack Buddy uses).
-3. Record the 30 s motion video from the real screens: the postmark landing (`CoupDeTampon`) is the hero shot.
+3. Record the 30 s motion video from the real screens.
 
 ## À confirmer / open
 - npm audit: 17 findings, all in dev tooling (firebase-tools, emulator test libs). The "fixes" are downgrades
@@ -31,3 +40,7 @@ application to Buddy (full-stack & AI work-study role).
   agreement and a privacy notice that says so. The app copy only claims that *Pli* does not store the letter.
 - Reminders (FCM push at D-7 / D-1) are not built: today the app is the reminder.
 - Rule extractor titles are generic (« Payer (amende) »). Claude writes real ones.
+- Web only: some emoji (📬, 🏠, ⚡, 🏆) render black and white, because Flutter's CanvasKit falls back to a
+  symbols font for them. Neither `fontFamilyFallback: ['Noto Color Emoji']` nor U+FE0F fixed it. Native
+  Android/iOS use the system color emoji.
+- `feat/demo-web` (pushed) is the demo on the old design, superseded by `style-buddy-simplification`: delete it.

@@ -33,6 +33,10 @@ cd app && flutter run -d chrome --web-port 5173 \
   --dart-define=PLI_EMULATEURS=true --dart-define=PLI_API_URL=http://127.0.0.1:8080
 # stop a server by its port, never with pkill -f
 fuser -k 8080/tcp
+
+# public web demo (no Firebase, no backend): build locally, Vercel has no Flutter. Project pli-demo.
+cd app && flutter build web --release --dart-define=PLI_DEMO=true   # web/vercel.json lands in build/web
+cd app/build/web && npx vercel link --yes --project pli-demo && rm -f .env.local && npx vercel deploy --prod
 ```
 On web, the Firebase emulator banner covers the
 bottom button: remove `.firebase-emulator-warning` when scripting screenshots.

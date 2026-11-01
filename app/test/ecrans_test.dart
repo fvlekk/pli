@@ -41,12 +41,19 @@ void main() {
     await tester.pumpAndSettle();
 
     final titres = ['En retard', 'Cette semaine', 'Ce mois-ci', 'Plus tard'];
-    final positions = [for (final t in titres) tester.getTopLeft(find.text(t)).dy];
+    // .first: the section title comes before the cards, whose countdown pill can also say « En retard ».
+    final positions = [for (final t in titres) tester.getTopLeft(find.text(t).first).dy];
     expect(positions, orderedEquals([...positions]..sort()), reason: 'panels in time order');
     expect(find.text('Une démarche est en retard.'), findsOneWidget);
     expect(find.text('Fait (1)'), findsOneWidget);
     expect(find.text('Envoyer l\'attestation'), findsNothing, reason: 'done items stay folded');
     expect(find.text('90 €'), findsWidgets);
+    expect(find.text('À FAIRE EN PREMIER'), findsOneWidget, reason: 'only the most pressing card is highlighted');
+    expect(
+      tester.getTopLeft(find.text('À FAIRE EN PREMIER')).dy,
+      lessThan(tester.getTopLeft(find.text('Payer l\'amende')).dy),
+      reason: 'the highlighted card is the late one, above this week\'s',
+    );
   });
 
   testWidgets('a letter is read, checked, then saved', (tester) async {

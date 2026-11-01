@@ -28,3 +28,23 @@ const actions = {
 };
 
 String libelleOrganisme(String id) => organismes[id] ?? 'Autre';
+
+/// One emoji per organisation, shown in its pill (like Buddy's category pills).
+const _emojis = {
+  'impots': '🧾',
+  'caf': '👶',
+  'assurance_maladie': '🩺',
+  'urssaf': '💼',
+  'france_travail': '🧑‍💼',
+  'prefecture': '🏛️',
+  'antai': '🚗',
+  'crous': '🎓',
+  'ants': '🪪',
+  'mutuelle': '💊',
+  'assurance': '🛡️',
+  'energie': '⚡',
+  'bailleur': '🏠',
+  'autre': '✉️',
+};
+
+String emojiOrganisme(String id) => _emojis[id] ?? '✉️';
