@@ -243,9 +243,7 @@ class _EnTete extends StatelessWidget {
               else
                 PastilleRebours(jours: jours),
               const SizedBox(width: Espaces.s),
-              Flexible(
-                child: Pastille('${emojiOrganisme(lecture.organisme)} ${libelleOrganisme(lecture.organisme)}'),
-              ),
+              Flexible(child: Pastille('${emojiOrganisme(lecture.organisme)} ${libelleOrganisme(lecture.organisme)}')),
             ],
           ),
           const SizedBox(height: Espaces.s),

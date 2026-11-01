@@ -70,10 +70,7 @@ class CarteEcheance extends StatelessWidget {
   Widget build(BuildContext context) {
     final e = echeance;
     final jours = joursRestants(e.dateLimite, aujourdhui);
-    final details = [
-      if (e.montant != null) euros(e.montant!),
-      if (e.aVerifier && !e.fait) 'À vérifier',
-    ].join(' · ');
+    final details = [if (e.montant != null) euros(e.montant!), if (e.aVerifier && !e.fait) 'À vérifier'].join(' · ');
 
     return Padding(
       padding: const EdgeInsets.only(bottom: Espaces.m),
@@ -83,9 +80,7 @@ class CarteEcheance extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(Rayons.carte),
           child: Ink(
-            decoration: enAvant
-                ? decorationCarte(fond: Couleurs.lilas, bord: Couleurs.lilasBord)
-                : decorationCarte(),
+            decoration: enAvant ? decorationCarte(fond: Couleurs.lilas, bord: Couleurs.lilasBord) : decorationCarte(),
             padding: const EdgeInsets.all(Espaces.m),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -96,12 +91,23 @@ class CarteEcheance extends StatelessWidget {
                 ],
                 Row(
                   children: [
-                    PastilleRebours(jours: jours, fait: e.fait),
-                    const SizedBox(width: Espaces.s),
-                    Flexible(
-                      child: Pastille('${emojiOrganisme(e.organisme)} ${libelleOrganisme(e.organisme)}'),
+                    // Both pills may shrink (ellipsis) so a large text size never overflows; the countdown first.
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Flexible(
+                            flex: 3,
+                            child: PastilleRebours(jours: jours, fait: e.fait),
+                          ),
+                          const SizedBox(width: Espaces.s),
+                          Flexible(
+                            flex: 2,
+                            child: Pastille('${emojiOrganisme(e.organisme)} ${libelleOrganisme(e.organisme)}'),
+                          ),
+                        ],
+                      ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: Espaces.s),
                     const Icon(Icons.calendar_today_outlined, size: 15, color: Couleurs.rouge),
                     const SizedBox(width: Espaces.xs),
                     Text(dateChiffres(e.dateLimite), style: Textes.etiquette.copyWith(color: Couleurs.rouge)),
@@ -117,10 +123,7 @@ class CarteEcheance extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (details.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(details, style: Textes.discret),
-                ],
+                if (details.isNotEmpty) ...[const SizedBox(height: 2), Text(details, style: Textes.discret)],
               ],
             ),
           ),

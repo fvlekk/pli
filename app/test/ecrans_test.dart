@@ -41,7 +41,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final titres = ['En retard', 'Cette semaine', 'Ce mois-ci', 'Plus tard'];
-    final positions = [for (final t in titres) tester.getTopLeft(find.text(t)).dy];
+    // .first: the section title comes before the cards, whose countdown pill can also say « En retard ».
+    final positions = [for (final t in titres) tester.getTopLeft(find.text(t).first).dy];
     expect(positions, orderedEquals([...positions]..sort()), reason: 'panels in time order');
     expect(find.text('Une démarche est en retard.'), findsOneWidget);
     expect(find.text('Fait (1)'), findsOneWidget);
