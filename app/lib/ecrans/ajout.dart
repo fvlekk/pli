@@ -214,35 +214,38 @@ class _Choix extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: Espaces.m),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(Rayons.carte),
-          child: Ink(
-            decoration: decorationCarte(),
-            padding: const EdgeInsets.all(Espaces.m),
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  alignment: Alignment.center,
-                  decoration: const BoxDecoration(color: Couleurs.corailPale, shape: BoxShape.circle),
-                  child: Text(emoji, style: const TextStyle(fontSize: 22)),
-                ),
-                const SizedBox(width: Espaces.m),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(titre, style: Textes.ligne),
-                      Text(detail, style: Textes.discret),
-                    ],
+      // The card paints its own shadow: an Ink decoration would be clipped to the Material's rectangle.
+      child: DecoratedBox(
+        decoration: decorationCarte(),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(Rayons.carte),
+            child: Padding(
+              padding: const EdgeInsets.all(Espaces.m),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    alignment: Alignment.center,
+                    decoration: const BoxDecoration(color: Couleurs.corailPale, shape: BoxShape.circle),
+                    child: Text(emoji, style: const TextStyle(fontSize: 22)),
                   ),
-                ),
-                const Icon(Icons.chevron_right, color: Couleurs.encreDouce),
-              ],
+                  const SizedBox(width: Espaces.m),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(titre, style: Textes.ligne),
+                        Text(detail, style: Textes.discret),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: Couleurs.encreDouce),
+                ],
+              ),
             ),
           ),
         ),

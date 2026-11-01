@@ -74,57 +74,62 @@ class CarteEcheance extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: Espaces.m),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(Rayons.carte),
-          child: Ink(
-            decoration: enAvant ? decorationCarte(fond: Couleurs.lilas, bord: Couleurs.lilasBord) : decorationCarte(),
-            padding: const EdgeInsets.all(Espaces.m),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (enAvant) ...[
-                  const Text('À FAIRE EN PREMIER', style: Textes.surtitre),
-                  const SizedBox(height: Espaces.s),
-                ],
-                Row(
-                  children: [
-                    // Both pills may shrink (ellipsis) so a large text size never overflows; the countdown first.
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Flexible(
-                            flex: 3,
-                            child: PastilleRebours(jours: jours, fait: e.fait),
-                          ),
-                          const SizedBox(width: Espaces.s),
-                          Flexible(
-                            flex: 2,
-                            child: Pastille('${emojiOrganisme(e.organisme)} ${libelleOrganisme(e.organisme)}'),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: Espaces.s),
-                    const Icon(Icons.calendar_today_outlined, size: 15, color: Couleurs.rouge),
-                    const SizedBox(width: Espaces.xs),
-                    Text(dateChiffres(e.dateLimite), style: Textes.etiquette.copyWith(color: Couleurs.rouge)),
+      // The card paints its own shadow: an Ink decoration would be clipped to the Material's rectangle.
+      child: DecoratedBox(
+        decoration: enAvant ? decorationCarte(fond: Couleurs.lilas, bord: Couleurs.lilasBord) : decorationCarte(),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(Rayons.carte),
+            child: Padding(
+              padding: const EdgeInsets.all(Espaces.m),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (enAvant) ...[
+                    const Text('À FAIRE EN PREMIER', style: Textes.surtitre),
+                    const SizedBox(height: Espaces.s),
                   ],
-                ),
-                const SizedBox(height: Espaces.s + 2),
-                Text(
-                  e.titre,
-                  style: Textes.ligne.copyWith(
-                    decoration: e.fait ? TextDecoration.lineThrough : null,
-                    color: e.fait ? Couleurs.encreDouce : Couleurs.encre,
+                  Row(
+                    children: [
+                      // The countdown keeps at most 60 % of the room and the sender gets the rest, both with an
+                      // ellipsis, so a large text size never overflows.
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, place) => Row(
+                            children: [
+                              ConstrainedBox(
+                                constraints: BoxConstraints(maxWidth: place.maxWidth * 0.6),
+                                child: PastilleRebours(jours: jours, fait: e.fait),
+                              ),
+                              const SizedBox(width: Espaces.s),
+                              Flexible(
+                                child: Pastille('${emojiOrganisme(e.organisme)} ${libelleOrganisme(e.organisme)}'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: Espaces.s),
+                      const Icon(Icons.calendar_today_outlined, size: 15, color: Couleurs.rouge),
+                      const SizedBox(width: Espaces.xs),
+                      Text(dateChiffres(e.dateLimite), style: Textes.etiquette.copyWith(color: Couleurs.rouge)),
+                    ],
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (details.isNotEmpty) ...[const SizedBox(height: 2), Text(details, style: Textes.discret)],
-              ],
+                  const SizedBox(height: Espaces.s + 2),
+                  Text(
+                    e.titre,
+                    style: Textes.ligne.copyWith(
+                      decoration: e.fait ? TextDecoration.lineThrough : null,
+                      color: e.fait ? Couleurs.encreDouce : Couleurs.encre,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (details.isNotEmpty) ...[const SizedBox(height: 2), Text(details, style: Textes.discret)],
+                ],
+              ),
             ),
           ),
         ),
