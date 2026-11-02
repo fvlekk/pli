@@ -56,3 +56,28 @@ application to Buddy (full-stack & AI work-study role).
   2026-11-02. Both projects are now disconnected (`vercel git disconnect`); redo it after any new link.
 - The live Claude reading gives « avant le 12/11 » as 12 Nov: the X−1 rule is only on the unmerged
   `feat/eval-convention-sonnet-new-letters`.
+
+## Audit 2026-11-02 (to fix, by priority)
+Checked live: backend endpoints (401/404/405/422/429, CORS, size limits), Firestore isolation on the real
+database (A cannot read, list or write B; malformed or out-of-path writes refused), rules 27/27 on the
+emulator, app flows on https://pli-app-flame.vercel.app (read, check, save, done, undo, delete, reload).
+No secret tracked by git.
+1. **High: Claude cost is open to scripts.** Anyone can create anonymous Firebase accounts with the public
+   API key (done with curl) and call the backend; the per-uid limit caps nothing, the instance cap (20/min)
+   allows ~28 800 readings a day. Fix: Firebase App Check verified by the backend; keep the Anthropic cap.
+2. **Medium: PDF cost amplification.** A 5 MB PDF (up to ~100 pages) goes whole to Opus. Cap the page count
+   (pypdf) before calling Claude.
+3. **Medium: Firestore quota (Spark).** No limit on documents per user: a script can burn the free daily
+   writes and block saving for everyone. Fix: App Check on Firestore too.
+4. Low: restrict the Firebase web API key (HTTP referrers + only Identity Toolkit and Firestore APIs).
+5. Robustness: if Firebase init or anonymous sign-in fails at startup (offline, ad blocker), `main()` throws
+   and the web app stays blank. Add an error screen with a retry.
+6. Robustness: the anonymous account lives in the browser; clearing it or changing phone loses everything
+   (email linking is still to build).
+7. Robustness: Render cold start (~1 min) shows only « Je lis ton courrier… »; say the service is waking up.
+8. Bug: « À vérifier » adds a period after a reason that already ends with one (« retenu.. »),
+   `verification.dart` `_phrase`.
+9. Tooling: `firebase` `npm test` runs `node --test tests/`, which Node 24 rejects; use `tests/*.test.js`.
+10. Simplify: `FORMATS_FICHIER` in `courrier.py` is unused (the `Literal` in `main.py` is the real list);
+    `LecteurHttp` base64-encodes the file before checking its size; the clickable-card code is duplicated
+    in `CarteEcheance` and `ajout.dart` `_Choix`; `_importer`/`_photographier` repeat the same try/catch.
