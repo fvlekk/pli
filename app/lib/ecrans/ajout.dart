@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../config.dart';
 import '../exemples.dart';
+import '../outils/image_stub.dart' if (dart.library.js_interop) '../outils/image_web.dart';
 import '../services/depot_echeances.dart';
 import '../services/lecteur_courrier.dart';
 import '../theme.dart';
@@ -117,7 +118,12 @@ class _EcranAjoutState extends State<EcranAjout> {
       if (mounted) _signaler('Choisis un PDF ou une image (PNG, JPEG, WebP).');
       return null;
     }
-    return CourrierFichier(mediaType: type, octets: await fichier.readAsBytes());
+    final octets = await fichier.readAsBytes();
+    // A phone photo is often 5-12 MB: shrink it in the browser (readable, faster, no GPS metadata).
+    final reduite = type.startsWith('image/') ? await reduireImage(octets) : null;
+    return reduite == null
+        ? CourrierFichier(mediaType: type, octets: octets)
+        : CourrierFichier(mediaType: 'image/jpeg', octets: reduite);
   });
 
   Future<void> _photographier() => _lireFichier(() async {

@@ -2,6 +2,7 @@
 
 import base64
 import re
+import unicodedata
 from datetime import date
 from pathlib import Path
 
@@ -22,6 +23,11 @@ BALISE = re.compile(r"<\s*/?\s*courrier[^>]*>", re.IGNORECASE)
 
 def neutraliser(texte: str) -> str:
     """Removes every form of the <courrier> tag, until none is left (nested tricks included)."""
+    # Look-alike characters (full-width ＜ ＞) become plain ones under NFKC. Only a letter that holds some
+    # form of the tag is normalised: every other letter reaches the model exactly as written.
+    if not BALISE.search(unicodedata.normalize("NFKC", texte)):
+        return texte
+    texte = unicodedata.normalize("NFKC", texte)
     while True:
         propre = BALISE.sub("", texte)
         if propre == texte:
