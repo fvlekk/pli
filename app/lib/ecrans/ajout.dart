@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -8,11 +10,15 @@ import '../exemples.dart';
 import '../services/depot_echeances.dart';
 import '../services/lecteur_courrier.dart';
 import '../theme.dart';
+import '../widgets/carte_cliquable.dart';
 import 'verification.dart';
 
 /// Picking or reading a file can fail on a phone (permission, a huge photo, browser quirks): say so, never stay
 /// silent.
 const _fichierIllisible = 'Impossible d\'ouvrir ce fichier. Réessaie, ou colle le texte du courrier.';
+
+/// After this, the reading screen says the service is waking up.
+const attenteLente = Duration(seconds: 8);
 
 const _typesFichier = {
   'pdf': 'application/pdf',
@@ -37,11 +43,14 @@ class _EcranAjoutState extends State<EcranAjout> {
   final _texte = TextEditingController();
   final _defilement = ScrollController();
   bool _enCours = false;
+  bool _lent = false;
+  Timer? _minuteurLent;
   bool _texteOuvert = false;
   String? _erreur;
 
   @override
   void dispose() {
+    _minuteurLent?.cancel();
     _texte.dispose();
     _defilement.dispose();
     super.dispose();
@@ -50,10 +59,15 @@ class _EcranAjoutState extends State<EcranAjout> {
   Future<void> _lire(CourrierAEnvoyer courrier) async {
     setState(() {
       _enCours = true;
+      _lent = false;
       _erreur = null;
     });
+    // The free backend sleeps when idle and takes about a minute to wake up: say so instead of looking stuck.
+    _minuteurLent = Timer(attenteLente, () {
+      if (mounted) setState(() => _lent = true);
+    });
     try {
-      final lecture = await widget.lecteur.lire(courrier);
+      final lecture = await widget.lecteur.lire(courrier).whenComplete(() => _minuteurLent?.cancel());
       if (!mounted) return;
       final enregistree = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
@@ -64,7 +78,13 @@ class _EcranAjoutState extends State<EcranAjout> {
     } on LectureImpossible catch (e) {
       if (mounted) _signaler(e.message);
     } finally {
-      if (mounted) setState(() => _enCours = false);
+      _minuteurLent?.cancel();
+      if (mounted) {
+        setState(() {
+          _enCours = false;
+          _lent = false;
+        });
+      }
     }
   }
 
@@ -76,36 +96,34 @@ class _EcranAjoutState extends State<EcranAjout> {
     }
   }
 
-  Future<void> _importer() async {
-    final CourrierFichier courrier;
+  /// Picking or reading a file can throw on a phone: any failure becomes a message, never a silent screen.
+  /// `choisir` returns null when the user cancels.
+  Future<void> _lireFichier(Future<CourrierFichier?> Function() choisir) async {
+    final CourrierFichier? courrier;
     try {
-      final fichier = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: _typesFichier.keys.toList());
-      if (fichier == null || !mounted) return;
-      final type = _typesFichier[fichier.extension?.toLowerCase()];
-      if (type == null) {
-        _signaler('Choisis un PDF ou une image (PNG, JPEG, WebP).');
-        return;
-      }
-      courrier = CourrierFichier(mediaType: type, octets: await fichier.readAsBytes());
+      courrier = await choisir();
     } catch (_) {
       if (mounted) _signaler(_fichierIllisible);
       return;
     }
-    await _lire(courrier);
+    if (courrier != null && mounted) await _lire(courrier);
   }
 
-  Future<void> _photographier() async {
-    final CourrierFichier courrier;
-    try {
-      final photo = await ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 2000, imageQuality: 80);
-      if (photo == null) return;
-      courrier = CourrierFichier(mediaType: 'image/jpeg', octets: await photo.readAsBytes());
-    } catch (_) {
-      if (mounted) _signaler(_fichierIllisible);
-      return;
+  Future<void> _importer() => _lireFichier(() async {
+    final fichier = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: _typesFichier.keys.toList());
+    if (fichier == null) return null;
+    final type = _typesFichier[fichier.extension?.toLowerCase()];
+    if (type == null) {
+      if (mounted) _signaler('Choisis un PDF ou une image (PNG, JPEG, WebP).');
+      return null;
     }
-    await _lire(courrier);
-  }
+    return CourrierFichier(mediaType: type, octets: await fichier.readAsBytes());
+  });
+
+  Future<void> _photographier() => _lireFichier(() async {
+    final photo = await ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 2000, imageQuality: 80);
+    return photo == null ? null : CourrierFichier(mediaType: 'image/jpeg', octets: await photo.readAsBytes());
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +142,7 @@ class _EcranAjoutState extends State<EcranAjout> {
                   children: [
                     Text(
                       _enCours
-                          ? 'Je lis ton courrier…'
+                          ? (_lent ? 'Le service se réveille, ça peut prendre une minute…' : 'Je lis ton courrier…')
                           : 'Pli lit le courrier et te propose l\'échéance. Pli n\'enregistre pas le courrier : '
                                 'seule l\'échéance que tu valides est gardée.',
                       style: Textes.corps.copyWith(color: Couleurs.encreDouce),
@@ -230,43 +248,29 @@ class _Choix extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Espaces.m),
-      // The card paints its own shadow: an Ink decoration would be clipped to the Material's rectangle.
-      child: DecoratedBox(
-        decoration: decorationCarte(),
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(Rayons.carte),
-            child: Padding(
-              padding: const EdgeInsets.all(Espaces.m),
-              child: Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    alignment: Alignment.center,
-                    decoration: const BoxDecoration(color: Couleurs.corailPale, shape: BoxShape.circle),
-                    child: Text(emoji, style: const TextStyle(fontSize: 22)),
-                  ),
-                  const SizedBox(width: Espaces.m),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(titre, style: Textes.ligne),
-                        Text(detail, style: Textes.discret),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right, color: Couleurs.encreDouce),
-                ],
-              ),
+    return CarteCliquable(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(color: Couleurs.corailPale, shape: BoxShape.circle),
+            child: Text(emoji, style: const TextStyle(fontSize: 22)),
+          ),
+          const SizedBox(width: Espaces.m),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(titre, style: Textes.ligne),
+                Text(detail, style: Textes.discret),
+              ],
             ),
           ),
-        ),
+          const Icon(Icons.chevron_right, color: Couleurs.encreDouce),
+        ],
       ),
     );
   }

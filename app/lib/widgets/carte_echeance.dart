@@ -4,6 +4,7 @@ import '../modeles/echeance.dart';
 import '../modeles/libelles.dart';
 import '../outils/dates.dart';
 import '../theme.dart';
+import 'carte_cliquable.dart';
 
 /// A rounded pill, like Buddy's « Astuce » / « 🚗 transports » tags.
 /// Filled when `fond` is set, outlined otherwise.
@@ -72,67 +73,49 @@ class CarteEcheance extends StatelessWidget {
     final jours = joursRestants(e.dateLimite, aujourdhui);
     final details = [if (e.montant != null) euros(e.montant!), if (e.aVerifier && !e.fait) 'À vérifier'].join(' · ');
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Espaces.m),
-      // The card paints its own shadow: an Ink decoration would be clipped to the Material's rectangle.
-      child: DecoratedBox(
-        decoration: enAvant ? decorationCarte(fond: Couleurs.lilas, bord: Couleurs.lilasBord) : decorationCarte(),
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(Rayons.carte),
-            child: Padding(
-              padding: const EdgeInsets.all(Espaces.m),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (enAvant) ...[
-                    const Text('À FAIRE EN PREMIER', style: Textes.surtitre),
-                    const SizedBox(height: Espaces.s),
-                  ],
-                  Row(
+    return CarteCliquable(
+      onTap: onTap,
+      decoration: enAvant ? decorationCarte(fond: Couleurs.lilas, bord: Couleurs.lilasBord) : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (enAvant) ...[const Text('À FAIRE EN PREMIER', style: Textes.surtitre), const SizedBox(height: Espaces.s)],
+          Row(
+            children: [
+              // The countdown keeps at most 60 % of the room and the sender gets the rest, both with an
+              // ellipsis, so a large text size never overflows.
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, place) => Row(
                     children: [
-                      // The countdown keeps at most 60 % of the room and the sender gets the rest, both with an
-                      // ellipsis, so a large text size never overflows.
-                      Expanded(
-                        child: LayoutBuilder(
-                          builder: (context, place) => Row(
-                            children: [
-                              ConstrainedBox(
-                                constraints: BoxConstraints(maxWidth: place.maxWidth * 0.6),
-                                child: PastilleRebours(jours: jours, fait: e.fait),
-                              ),
-                              const SizedBox(width: Espaces.s),
-                              Flexible(
-                                child: Pastille('${emojiOrganisme(e.organisme)} ${libelleOrganisme(e.organisme)}'),
-                              ),
-                            ],
-                          ),
-                        ),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: place.maxWidth * 0.6),
+                        child: PastilleRebours(jours: jours, fait: e.fait),
                       ),
                       const SizedBox(width: Espaces.s),
-                      const Icon(Icons.calendar_today_outlined, size: 15, color: Couleurs.rouge),
-                      const SizedBox(width: Espaces.xs),
-                      Text(dateChiffres(e.dateLimite), style: Textes.etiquette.copyWith(color: Couleurs.rouge)),
+                      Flexible(child: Pastille('${emojiOrganisme(e.organisme)} ${libelleOrganisme(e.organisme)}')),
                     ],
                   ),
-                  const SizedBox(height: Espaces.s + 2),
-                  Text(
-                    e.titre,
-                    style: Textes.ligne.copyWith(
-                      decoration: e.fait ? TextDecoration.lineThrough : null,
-                      color: e.fait ? Couleurs.encreDouce : Couleurs.encre,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (details.isNotEmpty) ...[const SizedBox(height: 2), Text(details, style: Textes.discret)],
-                ],
+                ),
               ),
-            ),
+              const SizedBox(width: Espaces.s),
+              const Icon(Icons.calendar_today_outlined, size: 15, color: Couleurs.rouge),
+              const SizedBox(width: Espaces.xs),
+              Text(dateChiffres(e.dateLimite), style: Textes.etiquette.copyWith(color: Couleurs.rouge)),
+            ],
           ),
-        ),
+          const SizedBox(height: Espaces.s + 2),
+          Text(
+            e.titre,
+            style: Textes.ligne.copyWith(
+              decoration: e.fait ? TextDecoration.lineThrough : null,
+              color: e.fait ? Couleurs.encreDouce : Couleurs.encre,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (details.isNotEmpty) ...[const SizedBox(height: 2), Text(details, style: Textes.discret)],
+        ],
       ),
     );
   }
