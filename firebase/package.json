@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "firebase emulators:exec --only firestore --project demo-pli \"node --test tests/\"",
+    "test": "firebase emulators:exec --only firestore --project demo-pli \"node --test tests/*.test.js\"",
     "emulateurs": "firebase emulators:start --only auth,firestore --project demo-pli"
   },
   "devDependencies": {
