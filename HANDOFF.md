@@ -4,7 +4,7 @@
 Prototype on a Flutter, Python, Firestore, Google Cloud, GitLab CI and Claude Code stack, built for a job
 application to Buddy (full-stack & AI work-study role).
 
-## State (2026-11-02)
+## State (2026-11-03)
 - **Real app live: https://pli-app-flame.vercel.app** (Vercel project `pli-app`), checked end to end on
   2026-11-02: a sample letter read by Claude, checked, saved to Firestore, shown on the home screen.
   Firebase project `plii-ba3d8` on the free Spark plan (anonymous auth, Firestore in europe-west9, rules
@@ -12,7 +12,8 @@ application to Buddy (full-stack & AI work-study role).
   15 min, ~1 min to wake up): Google Cloud billing could not be set up (payment refused), so no Cloud Run.
   Render env: `ANTHROPIC_API_KEY` (set by Falek in Render), `PLI_PROJET_FIREBASE=plii-ba3d8`,
   `PLI_ORIGINES_CORS=https://pli-app-flame.vercel.app`, `PLI_REQUETES_PAR_MINUTE_INSTANCE=20`.
-  **No App Check yet**: keep the app URL private, rely on the Anthropic monthly cap.
+  **App Check required by the backend** (`PLI_APP_CHECK=1`, 2026-11-03): a script without the app's token gets
+  401. Checked live end to end (token issued, reading by Claude, saved). Google sign-in available (optional).
 - **Web demo live: https://pli-demo.vercel.app** (Vercel project `pli-demo`). Flag `PLI_DEMO=true`: no Firebase, no backend. `app/lib/demo/` holds an in-memory store (3 made-up deadlines: late,
   this week, this month) and a reader that answers the 3 sample letters only. App: 33 tests, analyzer clean;
   every demo screen checked at 390 px. The bill reads 11 Nov (« avant le 12 » = X−1, the rule of
@@ -33,7 +34,8 @@ application to Buddy (full-stack & AI work-study role).
 - On GitHub (public): `main` starts empty, the prototype comes in through the first pull request.
 
 ## Next step
-0. Before sharing the real app (e.g. with Buddy): Firebase App Check verified by the backend.
+0. Enforce App Check on Cloud Firestore and Authentication (Firebase console, App Check > APIs): until then a
+   script can still create anonymous accounts and write its own Firestore documents (never another user's).
 1. With an Anthropic key: `cd backend && uv run python -m evals.run --extracteur claude --split test` (~14 calls).
    Paste the scores into the README table, then compare `PLI_EFFORT=low` against `medium`.
 2. Mirror to GitLab so `.gitlab-ci.yml` runs too (the stack Buddy uses).
@@ -64,8 +66,8 @@ emulator, app flows on https://pli-app-flame.vercel.app (read, check, save, done
 No secret tracked by git.
 Fixed on branch `fix/audit-2026-11-02` (backend 77 tests, app 40, rules 27):
 - App Check: backend verifies `X-Firebase-AppCheck` (logged only, required with `PLI_APP_CHECK=1`); web app
-  activates it with a reCAPTCHA Enterprise key (`PLI_RECAPTCHA_CLE`). **Rollout still to do** (console steps: reCAPTCHA
-  key, App Check registration, then `PLI_APP_CHECK=1` on Render and enforcement on Firestore and Auth).
+  activates it with a reCAPTCHA Enterprise key (`PLI_RECAPTCHA_CLE`, created and registered with gcloud and the
+  App Check API). Backend enforcement on since 2026-11-03; Firestore and Auth enforcement still to switch on.
 - PDFs over `PLI_PAGES_MAX` (10) pages refused before Claude; broken or locked PDFs are a 422.
 - App: retry screen instead of a blank page at start; « le service se réveille » after 8 s; no « retenu.. »;
   the detail sheet scrolls (a long summary hid its buttons); shared `CarteCliquable`, one `_lireFichier`,
