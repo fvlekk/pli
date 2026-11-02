@@ -64,7 +64,7 @@ emulator, app flows on https://pli-app-flame.vercel.app (read, check, save, done
 No secret tracked by git.
 Fixed on branch `fix/audit-2026-11-02` (backend 77 tests, app 40, rules 27):
 - App Check: backend verifies `X-Firebase-AppCheck` (logged only, required with `PLI_APP_CHECK=1`); web app
-  activates it with a reCAPTCHA v3 key (`PLI_RECAPTCHA_CLE`). **Rollout still to do** (console steps: reCAPTCHA
+  activates it with a reCAPTCHA Enterprise key (`PLI_RECAPTCHA_CLE`). **Rollout still to do** (console steps: reCAPTCHA
   key, App Check registration, then `PLI_APP_CHECK=1` on Render and enforcement on Firestore and Auth).
 - PDFs over `PLI_PAGES_MAX` (10) pages refused before Claude; broken or locked PDFs are a 422.
 - App: retry screen instead of a blank page at start; « le service se réveille » after 8 s; no « retenu.. »;

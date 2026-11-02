@@ -8,7 +8,7 @@ abstract final class Config {
   /// Public web demo: no Firebase, no backend. Deadlines live in memory and only the sample letters are read.
   static const demo = bool.fromEnvironment('PLI_DEMO');
 
-  /// Public reCAPTCHA v3 site key for App Check on the web. Empty: App Check off (local runs, emulators).
+  /// Public reCAPTCHA Enterprise site key (score) for App Check on the web. Empty: App Check off (local runs, emulators).
   static const cleRecaptcha = String.fromEnvironment('PLI_RECAPTCHA_CLE');
 
   /// 127.0.0.1 for web and iOS simulator, 10.0.2.2 for the Android emulator.

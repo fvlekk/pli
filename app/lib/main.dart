@@ -48,7 +48,9 @@ Future<Widget> _appConnectee() async {
       FirebaseFirestore.instance.useFirestoreEmulator(Config.hoteEmulateurs, 8085);
     }
     // Firestore and Auth then attach App Check tokens by themselves; the backend gets one per request below.
-    if (_appCheck) await FirebaseAppCheck.instance.activate(providerWeb: ReCaptchaV3Provider(Config.cleRecaptcha));
+    if (_appCheck) {
+      await FirebaseAppCheck.instance.activate(providerWeb: ReCaptchaEnterpriseProvider(Config.cleRecaptcha));
+    }
     _firebasePret = true;
   }
   final session = Session(FirebaseAuth.instance);
