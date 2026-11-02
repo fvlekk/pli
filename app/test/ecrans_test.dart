@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:pli/app.dart';
+import 'package:pli/ecrans/ajout.dart';
+import 'package:pli/ecrans/demarrage.dart';
 import 'package:pli/ecrans/verification.dart';
+import 'package:pli/modeles/lecture.dart';
 import 'package:pli/services/lecteur_courrier.dart';
 import 'package:pli/theme.dart';
 
@@ -145,4 +150,56 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(DatePickerDialog), findsOneWidget);
   });
+
+  testWidgets('a slow reading says the service is waking up, then goes on', (tester) async {
+    // Tall enough that the status line at the top stays built while an example at the bottom is tapped.
+    await tester.binding.setSurfaceSize(const Size(420, 2000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final lecteur = _LecteurLent();
+    await tester.pumpWidget(PliApp(depot: FauxDepot(), lecteur: lecteur, maintenant: () => aujourdhui));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ajouter un courrier'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Une amende'));
+    await tester.pump();
+    expect(find.text('Je lis ton courrier…'), findsOneWidget);
+    await tester.pump(attenteLente + const Duration(seconds: 1));
+    expect(find.text('Le service se réveille, ça peut prendre une minute…'), findsOneWidget);
+    lecteur.reponse.complete(lecture());
+    await tester.pumpAndSettle();
+    expect(find.text('Vérifie avant d\'enregistrer'), findsOneWidget);
+  });
+
+  testWidgets('a reason that already ends with a period gets no second one', (tester) async {
+    final l = lecture(aVerifier: true, raison: 'le montant de 135 € a donc été retenu.');
+    await tester.pumpWidget(verification(FauxDepot(), l: l));
+    await tester.pumpAndSettle();
+    expect(find.text('Le montant de 135 € a donc été retenu.'), findsOneWidget);
+  });
+
+  testWidgets('tapping a deadline card opens its details', (tester) async {
+    await tester.pumpWidget(appli(FauxDepot([echeance()])));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Payer l\'amende'));
+    await tester.pumpAndSettle();
+    expect(find.text('C\'est fait'), findsOneWidget);
+  });
+
+  testWidgets('when the app cannot start, it says so and retries', (tester) async {
+    var essais = 0;
+    await tester.pumpWidget(EcranDemarrageImpossible(onReessayer: () async => essais++));
+    expect(find.text('Pli n\'arrive pas à démarrer'), findsOneWidget);
+    await tester.tap(find.text('Réessayer'));
+    await tester.pumpAndSettle();
+    expect(essais, 1);
+    expect(find.text('Réessayer'), findsOneWidget, reason: 'the button comes back if the retry failed too');
+  });
+}
+
+/// Answers only when the test says so, like a backend waking up.
+class _LecteurLent implements LecteurCourrier {
+  final reponse = Completer<Lecture>();
+
+  @override
+  Future<Lecture> lire(CourrierAEnvoyer courrier) => reponse.future;
 }

@@ -1,11 +1,13 @@
-"""Firebase ID token verification. Every route except /healthz needs a valid token."""
+"""Firebase ID token and App Check token verification. Every route except /healthz needs a valid ID token."""
 
 from typing import Protocol
 
 import firebase_admin
+from firebase_admin import app_check as firebase_app_check
 from firebase_admin import auth as firebase_auth
 from firebase_admin import credentials
 from google.auth.credentials import AnonymousCredentials
+from jwt import PyJWKClientConnectionError, PyJWKClientError
 
 
 class JetonInvalide(Exception):
@@ -18,6 +20,9 @@ class AuthIndisponible(Exception):
 
 class VerificateurJeton(Protocol):
     def uid(self, jeton: str) -> str: ...
+
+    def app_check(self, jeton: str) -> None:
+        """Raises JetonInvalide unless the App Check token proves the request comes from our app."""
 
 
 class _SansCompte(credentials.Base):
@@ -54,4 +59,17 @@ class VerificateurFirebase:
         except firebase_auth.CertificateFetchError as e:
             raise AuthIndisponible(type(e).__name__) from e
         except (ValueError, firebase_auth.InvalidIdTokenError, firebase_auth.ExpiredIdTokenError) as e:
+            raise JetonInvalide(type(e).__name__) from e
+
+    def app_check(self, jeton: str) -> None:
+        """Checks an App Check token: signature, expiry, audience (the project). Only the keys are fetched.
+
+        Anonymous accounts are free to create from a script; App Check is what proves the call comes from the
+        real app on a real browser (reCAPTCHA).
+        """
+        try:
+            firebase_app_check.verify_token(jeton)
+        except PyJWKClientConnectionError as e:  # Google's App Check keys unreachable
+            raise AuthIndisponible(type(e).__name__) from e
+        except (ValueError, PyJWKClientError) as e:  # PyJWKClientError: a key id Google never issued
             raise JetonInvalide(type(e).__name__) from e

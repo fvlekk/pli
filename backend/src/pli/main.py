@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from pli.auth import AuthIndisponible, JetonInvalide, VerificateurFirebase, VerificateurJeton
 from pli.config import Config
-from pli.courrier import Courrier, FormatNonLisible
+from pli.courrier import Courrier, FormatNonLisible, nombre_de_pages
 from pli.extracteurs.base import Extracteur
 from pli.extracteurs.claude import ExtracteurClaude, ExtractionImpossible, ServiceIndisponible
 from pli.extracteurs.regle import ExtracteurRegle
@@ -94,11 +94,33 @@ def creer_app(
         CORSMiddleware,
         allow_origins=list(config.origines_cors),
         allow_methods=["GET", "POST"],
-        allow_headers=["Authorization", "Content-Type"],
+        allow_headers=["Authorization", "Content-Type", "X-Firebase-AppCheck"],
         max_age=600,
     )
 
+    def application(request: Request) -> str:
+        """« ok », « absent », « invalide » or « indisponible ». Blocks only when App Check is required."""
+        jeton = request.headers.get("x-firebase-appcheck", "").strip()
+        if not jeton:
+            statut = "absent"
+        else:
+            try:
+                verificateur.app_check(jeton)
+                statut = "ok"
+            except JetonInvalide:
+                statut = "invalide"
+            except AuthIndisponible:
+                statut = "indisponible"
+        if config.app_check_obligatoire and statut != "ok":
+            if statut == "indisponible":
+                raise HTTPException(
+                    503, "Vérification impossible pour le moment, réessaie", {"Retry-After": "30"}
+                )
+            raise HTTPException(401, "Application non reconnue : recharge la page")
+        return statut
+
     def utilisateur(request: Request) -> str:
+        request.state.app_check = application(request)
         entete = request.headers.get("authorization", "")
         if not entete.lower().startswith("bearer "):
             raise HTTPException(401, "Connexion requise")
@@ -121,7 +143,9 @@ def creer_app(
         return {"ok": True, "extracteur": extracteur.nom}
 
     @app.post("/v1/extractions")
-    def extraire(demande: DemandeExtraction, uid: str = Depends(utilisateur)) -> ReponseExtraction:
+    def extraire(
+        demande: DemandeExtraction, request: Request, uid: str = Depends(utilisateur)
+    ) -> ReponseExtraction:
         if demande.fichier:
             try:
                 contenu = base64.b64decode(demande.fichier.donnees_base64, validate=True)
@@ -129,6 +153,16 @@ def creer_app(
                 raise HTTPException(422, "Fichier mal encodé") from None
             if len(contenu) > config.taille_max_octets:
                 raise HTTPException(413, "Fichier trop lourd (5 Mo maximum)")
+            if demande.fichier.media_type == "application/pdf":
+                try:
+                    pages = nombre_de_pages(contenu)
+                except FormatNonLisible as e:
+                    raise HTTPException(422, f"Je ne sais pas lire ce courrier : {e}") from None
+                if pages > config.pages_max:
+                    raise HTTPException(
+                        422,
+                        f"PDF trop long ({config.pages_max} pages maximum) : garde les pages utiles",
+                    )
             courrier = Courrier(media_type=demande.fichier.media_type, contenu=contenu)
         else:
             courrier = Courrier(texte=demande.texte)
@@ -138,6 +172,7 @@ def creer_app(
             "uid": uid_masque(uid),
             "extracteur": extracteur.nom,
             "media_type": courrier.media_type or "text",
+            "app_check": request.state.app_check,
         }
         try:
             resultat = extracteur.extraire(courrier, date_de_reception(demande.recu_le, aujourdhui()))

@@ -176,8 +176,10 @@ class _Detail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The sheet is capped at 9/16 of the screen and a summary can be 500 characters: scroll rather than hide
+    // the buttons on a small phone.
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(Espaces.l, 0, Espaces.l, Espaces.l),
         child: Column(
           mainAxisSize: MainAxisSize.min,

@@ -37,16 +37,27 @@ abstract interface class LecteurCourrier {
 const tailleMaxOctets = 5 * 1024 * 1024;
 
 class LecteurHttp implements LecteurCourrier {
-  LecteurHttp({required this.urlApi, required this.jeton, http.Client? client, this.maintenant = DateTime.now})
-    : _client = client ?? http.Client();
+  LecteurHttp({
+    required this.urlApi,
+    required this.jeton,
+    this.jetonApp,
+    http.Client? client,
+    this.maintenant = DateTime.now,
+  }) : _client = client ?? http.Client();
 
   final Uri urlApi;
   final Future<String> Function() jeton;
+
+  /// App Check token: proves the call comes from this app, not from a script with a free anonymous account.
+  final Future<String?> Function()? jetonApp;
   final DateTime Function() maintenant;
   final http.Client _client;
 
   @override
   Future<Lecture> lire(CourrierAEnvoyer courrier) async {
+    if (courrier case CourrierFichier(:final octets) when octets.length > tailleMaxOctets) {
+      throw const LectureImpossible('Ce fichier dépasse 5 Mo. Prends une photo plus légère ou colle le texte.');
+    }
     final aujourdhui = maintenant();
     final corps = {
       ...switch (courrier) {
@@ -58,16 +69,18 @@ class LecteurHttp implements LecteurCourrier {
       // The user's own day: "within 15 days of receipt" counts from here (the backend allows ±1 day).
       'recu_le': DateTime(aujourdhui.year, aujourdhui.month, aujourdhui.day).toIso8601String().substring(0, 10),
     };
-    if (courrier case CourrierFichier(:final octets) when octets.length > tailleMaxOctets) {
-      throw const LectureImpossible('Ce fichier dépasse 5 Mo. Prends une photo plus légère ou colle le texte.');
-    }
 
     final http.Response reponse;
     try {
+      final app = await _jetonApp();
       reponse = await _client
           .post(
             urlApi.resolve('/v1/extractions'),
-            headers: {'Authorization': 'Bearer ${await jeton()}', 'Content-Type': 'application/json'},
+            headers: {
+              'Authorization': 'Bearer ${await jeton()}',
+              'Content-Type': 'application/json',
+              if (app != null && app.isNotEmpty) 'X-Firebase-AppCheck': app,
+            },
             body: jsonEncode(corps),
           )
           .timeout(const Duration(seconds: 90));
@@ -81,6 +94,15 @@ class LecteurHttp implements LecteurCourrier {
     if (reponse.statusCode == 200 && json != null) return Lecture.depuisJson(json);
     final detail = json?['detail'];
     throw LectureImpossible(detail is String ? detail : 'Lecture impossible (erreur ${reponse.statusCode}).');
+  }
+
+  /// Without a token (reCAPTCHA blocked, App Check off) the request still goes: the backend decides.
+  Future<String?> _jetonApp() async {
+    try {
+      return await jetonApp?.call();
+    } catch (_) {
+      return null;
+    }
   }
 
   Map<String, dynamic>? _json(http.Response reponse) {

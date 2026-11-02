@@ -212,8 +212,11 @@ class _AVerifier extends StatelessWidget {
   }
 
   static String _phrase(String? raison) {
-    if (raison == null || raison.isEmpty) return 'Relis le courrier : une valeur est incertaine.';
-    return '${raison[0].toUpperCase()}${raison.substring(1)}.';
+    final texte = raison?.trim() ?? '';
+    if (texte.isEmpty) return 'Relis le courrier : une valeur est incertaine.';
+    final phrase = '${texte[0].toUpperCase()}${texte.substring(1)}';
+    // The model often ends its reason with a period already: never print « retenu.. ».
+    return RegExp(r'[.!?…]$').hasMatch(phrase) ? phrase : '$phrase.';
   }
 }
 

@@ -36,6 +36,12 @@ class FauxVerificateur:
             raise JetonInvalide("faux jeton")
         return jeton.removeprefix("ok-")
 
+    def app_check(self, jeton: str) -> None:
+        if jeton == "app-panne":
+            raise AuthIndisponible("PyJWKClientConnectionError")
+        if jeton != "app-ok":
+            raise JetonInvalide("faux jeton App Check")
+
 
 class FauxExtracteur:
     nom = "faux"
@@ -62,6 +68,8 @@ def config(**champs) -> Config:
         "requetes_par_minute": 3,
         "requetes_par_minute_instance": 100,
         "taille_max_octets": 1000,
+        "pages_max": 2,
+        "app_check_obligatoire": False,
         "auth_emulateur": False,
         "projet_firebase": None,
     }

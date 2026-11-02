@@ -100,4 +100,36 @@ void main() {
     await expectLater(() => lecteur(client).lire(gros), throwsA(isA<LectureImpossible>()));
     expect(appels, 0);
   });
+
+  group('App Check', () {
+    Future<Map<String, String>> entetes(Future<String?> Function()? jetonApp) async {
+      late Map<String, String> recues;
+      final client = MockClient((r) async {
+        recues = r.headers;
+        return json(reponseOk, 200);
+      });
+      await LecteurHttp(
+        urlApi: Uri.parse('https://api.pli.test'),
+        jeton: () async => 'jeton-1',
+        jetonApp: jetonApp,
+        client: client,
+      ).lire(const CourrierTexte('x'));
+      return recues;
+    }
+
+    test('the App Check token goes with every reading', () async {
+      expect((await entetes(() async => 'app-1'))['X-Firebase-AppCheck'], 'app-1');
+    });
+
+    test('without App Check, no header is sent', () async {
+      expect((await entetes(null)).containsKey('X-Firebase-AppCheck'), isFalse);
+      expect((await entetes(() async => null)).containsKey('X-Firebase-AppCheck'), isFalse);
+    });
+
+    test('a failing App Check token still sends the reading: the backend decides', () async {
+      final recues = await entetes(() async => throw StateError('reCAPTCHA bloqué'));
+      expect(recues.containsKey('X-Firebase-AppCheck'), isFalse);
+      expect(recues['Authorization'], 'Bearer jeton-1');
+    });
+  });
 }

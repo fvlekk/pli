@@ -26,3 +26,9 @@ def test_token_check_needs_no_google_credentials(sans_identifiants_google):
     # ask for credentials first (it crashed every request on Render with DefaultCredentialsError).
     with pytest.raises(JetonInvalide):
         VerificateurFirebase("plii-demo").uid("pas-un-jeton")
+
+
+def test_app_check_needs_no_google_credentials(sans_identifiants_google):
+    # Same as the ID token: a malformed App Check token is refused offline, without asking for credentials.
+    with pytest.raises(JetonInvalide):
+        VerificateurFirebase("plii-demo").app_check("pas-un-jeton")
