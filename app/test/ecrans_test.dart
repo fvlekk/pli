@@ -9,6 +9,7 @@ import 'package:pli/ecrans/demarrage.dart';
 import 'package:pli/ecrans/verification.dart';
 import 'package:pli/modeles/lecture.dart';
 import 'package:pli/services/lecteur_courrier.dart';
+import 'package:pli/services/session.dart';
 import 'package:pli/theme.dart';
 
 import 'faux.dart';
@@ -193,6 +194,74 @@ void main() {
     await tester.pumpAndSettle();
     expect(essais, 1);
     expect(find.text('Réessayer'), findsOneWidget, reason: 'the button comes back if the retry failed too');
+  });
+
+  group('Google account', () {
+    Future<void> accueil(WidgetTester tester, FauxDepot depot, Compte? compte, {VoidCallback? onCompteChange}) async {
+      await tester.binding.setSurfaceSize(const Size(420, 2000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        PliApp(
+          depot: depot,
+          lecteur: FauxLecteur(),
+          compte: compte,
+          onCompteChange: onCompteChange,
+          maintenant: () => aujourdhui,
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('an anonymous list can be kept with Google, same account', (tester) async {
+      final compte = FauxCompte();
+      await accueil(tester, FauxDepot([echeance()]), compte);
+      await tester.tap(find.text('Garder mes échéances avec Google'));
+      await tester.pumpAndSettle();
+      expect(compte.demandes, [false], reason: 'deadlines here: link, never replace');
+      expect(find.text('Tes échéances sont gardées avec ton compte Google'), findsOneWidget);
+      expect(find.text('Garder mes échéances avec Google'), findsNothing);
+    });
+
+    testWidgets('on an empty phone, Google opens the list kept elsewhere and the app restarts on it', (tester) async {
+      var redemarrages = 0;
+      final compte = FauxCompte(resultat: ResultatGoogle.connecte);
+      await accueil(tester, FauxDepot(), compte, onCompteChange: () => redemarrages++);
+      await tester.tap(find.text('Retrouver mes échéances avec Google'));
+      await tester.pumpAndSettle();
+      expect(compte.demandes, [true]);
+      expect(redemarrages, 1);
+    });
+
+    testWidgets('two lists are never merged silently: the user is told why', (tester) async {
+      final compte = FauxCompte(erreur: const CompteImpossible('Ce compte Google a déjà sa propre liste.'));
+      await accueil(tester, FauxDepot([echeance()]), compte);
+      await tester.tap(find.text('Garder mes échéances avec Google'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ce compte Google a déjà sa propre liste.'), findsOneWidget);
+      expect(find.text('Garder mes échéances avec Google'), findsOneWidget, reason: 'still anonymous');
+    });
+
+    testWidgets('closing the Google window changes nothing', (tester) async {
+      var redemarrages = 0;
+      final compte = FauxCompte(resultat: ResultatGoogle.annule);
+      await accueil(tester, FauxDepot([echeance()]), compte, onCompteChange: () => redemarrages++);
+      await tester.tap(find.text('Garder mes échéances avec Google'));
+      await tester.pumpAndSettle();
+      expect(find.byType(SnackBar), findsNothing);
+      expect(redemarrages, 0);
+      expect(find.text('Garder mes échéances avec Google'), findsOneWidget);
+    });
+
+    testWidgets('a Google account shows where the list is kept', (tester) async {
+      await accueil(tester, FauxDepot([echeance()]), FauxCompte(estAnonyme: false, email: 'camille@exemple.fr'));
+      expect(find.text('Échéances gardées avec camille@exemple.fr.'), findsOneWidget);
+      expect(find.text('Garder mes échéances avec Google'), findsNothing);
+    });
+
+    testWidgets('no account (demo): no Google card', (tester) async {
+      await accueil(tester, FauxDepot([echeance()]), null);
+      expect(find.textContaining('avec Google'), findsNothing);
+    });
   });
 }
 

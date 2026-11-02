@@ -4,6 +4,7 @@ import 'package:pli/modeles/echeance.dart';
 import 'package:pli/modeles/lecture.dart';
 import 'package:pli/services/depot_echeances.dart';
 import 'package:pli/services/lecteur_courrier.dart';
+import 'package:pli/services/session.dart';
 
 final aujourdhui = DateTime(2026, 10, 12);
 
@@ -90,5 +91,25 @@ class FauxLecteur implements LecteurCourrier {
     recus.add(courrier);
     if (erreur != null) throw erreur!;
     return reponse!;
+  }
+}
+
+class FauxCompte implements Compte {
+  FauxCompte({this.estAnonyme = true, this.email, this.resultat = ResultatGoogle.relie, this.erreur});
+
+  @override
+  bool estAnonyme;
+  @override
+  String? email;
+  final ResultatGoogle resultat;
+  final CompteImpossible? erreur;
+  final demandes = <bool>[];
+
+  @override
+  Future<ResultatGoogle> garderAvecGoogle({required bool listeVide}) async {
+    demandes.add(listeVide);
+    if (erreur != null) throw erreur!;
+    if (resultat == ResultatGoogle.relie) estAnonyme = false;
+    return resultat;
   }
 }

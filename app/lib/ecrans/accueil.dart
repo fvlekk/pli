@@ -5,16 +5,27 @@ import '../modeles/libelles.dart';
 import '../outils/dates.dart';
 import '../services/depot_echeances.dart';
 import '../services/lecteur_courrier.dart';
+import '../services/session.dart';
 import '../theme.dart';
+import '../widgets/carte_cliquable.dart';
 import '../widgets/carte_echeance.dart';
 import 'ajout.dart';
 
 class EcranAccueil extends StatelessWidget {
-  const EcranAccueil({super.key, required this.depot, required this.lecteur, required this.maintenant});
+  const EcranAccueil({
+    super.key,
+    required this.depot,
+    required this.lecteur,
+    required this.maintenant,
+    this.compte,
+    this.onCompteChange,
+  });
 
   final DepotEcheances depot;
   final LecteurCourrier lecteur;
   final DateTime Function() maintenant;
+  final Compte? compte;
+  final VoidCallback? onCompteChange;
 
   Future<void> _ajouter(BuildContext context) async {
     final enregistree = await Navigator.of(context).push<bool>(
@@ -40,7 +51,13 @@ class EcranAccueil extends StatelessWidget {
               );
             }
             if (!instantane.hasData) return const Center(child: CircularProgressIndicator());
-            return _Contenu(echeances: instantane.data!, aujourdhui: maintenant(), depot: depot);
+            return _Contenu(
+              echeances: instantane.data!,
+              aujourdhui: maintenant(),
+              depot: depot,
+              compte: compte,
+              onCompteChange: onCompteChange,
+            );
           },
         ),
       ),
@@ -57,11 +74,19 @@ class EcranAccueil extends StatelessWidget {
 }
 
 class _Contenu extends StatelessWidget {
-  const _Contenu({required this.echeances, required this.aujourdhui, required this.depot});
+  const _Contenu({
+    required this.echeances,
+    required this.aujourdhui,
+    required this.depot,
+    this.compte,
+    this.onCompteChange,
+  });
 
   final List<Echeance> echeances;
   final DateTime aujourdhui;
   final DepotEcheances depot;
+  final Compte? compte;
+  final VoidCallback? onCompteChange;
 
   @override
   Widget build(BuildContext context) {
@@ -113,6 +138,10 @@ class _Contenu extends StatelessWidget {
               children: [for (final e in faites) _carte(context, e)],
             ),
           ),
+        if (compte case final compte?) ...[
+          const SizedBox(height: Espaces.l),
+          _CarteCompte(compte: compte, listeVide: echeances.isEmpty, onCompteChange: onCompteChange),
+        ],
       ],
     );
   }
@@ -252,6 +281,83 @@ class _Message extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(Espaces.l),
         child: Text(texte, style: Textes.corps, textAlign: TextAlign.center),
+      ),
+    );
+  }
+}
+
+/// Anonymous until the user asks: then the list is kept with their Google account, to find it on another phone.
+class _CarteCompte extends StatefulWidget {
+  const _CarteCompte({required this.compte, required this.listeVide, this.onCompteChange});
+
+  final Compte compte;
+  final bool listeVide;
+  final VoidCallback? onCompteChange;
+
+  @override
+  State<_CarteCompte> createState() => _CarteCompteState();
+}
+
+class _CarteCompteState extends State<_CarteCompte> {
+  bool _enCours = false;
+
+  Future<void> _garder() async {
+    final messager = ScaffoldMessenger.of(context);
+    setState(() => _enCours = true);
+    try {
+      switch (await widget.compte.garderAvecGoogle(listeVide: widget.listeVide)) {
+        case ResultatGoogle.relie:
+          messager.showSnackBar(const SnackBar(content: Text('Tes échéances sont gardées avec ton compte Google')));
+        case ResultatGoogle.connecte:
+          widget.onCompteChange?.call();
+        case ResultatGoogle.annule:
+          break;
+      }
+    } on CompteImpossible catch (e) {
+      messager.showSnackBar(SnackBar(content: Text(e.message), duration: const Duration(seconds: 8)));
+    } finally {
+      if (mounted) setState(() => _enCours = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.compte.estAnonyme) {
+      final email = widget.compte.email;
+      return Text(
+        email == null ? 'Échéances gardées avec ton compte Google.' : 'Échéances gardées avec $email.',
+        style: Textes.discret,
+        textAlign: TextAlign.center,
+      );
+    }
+    return CarteCliquable(
+      onTap: _enCours ? () {} : _garder,
+      child: Row(
+        children: [
+          const Text('🔐', style: TextStyle(fontSize: 22)),
+          const SizedBox(width: Espaces.m),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.listeVide ? 'Retrouver mes échéances avec Google' : 'Garder mes échéances avec Google',
+                  style: Textes.ligne,
+                ),
+                Text(
+                  widget.listeVide
+                      ? 'Si tu les as gardées sur un autre téléphone.'
+                      : 'Pour les retrouver sur un autre téléphone.',
+                  style: Textes.discret,
+                ),
+              ],
+            ),
+          ),
+          if (_enCours)
+            const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+          else
+            const Icon(Icons.chevron_right, color: Couleurs.encreDouce),
+        ],
       ),
     );
   }
