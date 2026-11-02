@@ -6,11 +6,17 @@ from dataclasses import dataclass
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 
-FORMATS_FICHIER = {"application/pdf", "image/png", "image/jpeg", "image/webp"}
-
 
 class FormatNonLisible(Exception):
     """The extractor cannot read this kind of document."""
+
+
+def nombre_de_pages(pdf: bytes) -> int:
+    """Pages of a PDF sent by a user, checked before any extractor reads it."""
+    try:
+        return len(PdfReader(io.BytesIO(pdf)).pages)
+    except Exception as e:  # untrusted bytes: pypdf raises many kinds of errors on a broken file
+        raise FormatNonLisible("PDF illisible ou protégé par un mot de passe") from e
 
 
 @dataclass(frozen=True)

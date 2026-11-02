@@ -17,6 +17,8 @@ class Config:
     requetes_par_minute: int
     requetes_par_minute_instance: int
     taille_max_octets: int
+    pages_max: int
+    app_check_obligatoire: bool
     auth_emulateur: bool
     projet_firebase: str | None
 
@@ -36,6 +38,10 @@ class Config:
             requetes_par_minute=int(env.get("PLI_REQUETES_PAR_MINUTE", "10")),
             requetes_par_minute_instance=int(env.get("PLI_REQUETES_PAR_MINUTE_INSTANCE", "60")),
             taille_max_octets=int(env.get("PLI_TAILLE_MAX_OCTETS", str(5 * 1024 * 1024))),
+            # A letter is a few pages; a long PDF would multiply the cost of one Claude call.
+            pages_max=int(env.get("PLI_PAGES_MAX", "10")),
+            # Off: App Check tokens are checked and logged, never required (rollout). On: required.
+            app_check_obligatoire=env.get("PLI_APP_CHECK") == "1",
             auth_emulateur=env.get("PLI_AUTH_EMULATEUR") == "1",
             projet_firebase=env.get("PLI_PROJET_FIREBASE") or env.get("GOOGLE_CLOUD_PROJECT"),
         )

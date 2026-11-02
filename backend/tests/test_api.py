@@ -1,10 +1,16 @@
 import base64
+import io
+import json
 from datetime import date
+
+from fastapi.testclient import TestClient
+from pypdf import PdfWriter
 
 from pli.courrier import FormatNonLisible
 from pli.extracteurs.claude import ExtractionImpossible, ServiceIndisponible
+from pli.main import creer_app
 
-from .conftest import AUJOURDHUI, AUTH
+from .conftest import AUJOURDHUI, AUTH, FauxVerificateur, config
 
 COURRIER = {"texte": "Montant à payer : 120,00 €. Date limite de paiement : 15/11/2026."}
 
@@ -117,3 +123,82 @@ def test_the_phones_date_is_used_within_a_day(client, extracteur):
 def test_an_implausible_phone_date_is_ignored(client, extracteur):
     client.post("/v1/extractions", json={**COURRIER, "recu_le": "2020-01-01"}, headers=AUTH)
     assert extracteur.appels[-1][1] == AUJOURDHUI
+
+
+def client_avec(extracteur, **reglages) -> TestClient:
+    app = creer_app(config(**reglages), extracteur, FauxVerificateur(), aujourdhui=lambda: AUJOURDHUI)
+    return TestClient(app)
+
+
+def journal_extraction(capsys) -> dict:
+    lignes = [json.loads(ligne) for ligne in capsys.readouterr().out.splitlines() if ligne.startswith("{")]
+    return next(ligne for ligne in lignes if ligne["message"] == "extraction")
+
+
+def test_app_check_is_only_logged_while_not_required(client, capsys):
+    assert client.post("/v1/extractions", json=COURRIER, headers=AUTH).status_code == 200
+    assert journal_extraction(capsys)["app_check"] == "absent"
+    faux = {**AUTH, "X-Firebase-AppCheck": "forge"}
+    assert client.post("/v1/extractions", json=COURRIER, headers=faux).status_code == 200
+    assert journal_extraction(capsys)["app_check"] == "invalide"
+    bon = {**AUTH, "X-Firebase-AppCheck": "app-ok"}
+    assert client.post("/v1/extractions", json=COURRIER, headers=bon).status_code == 200
+    assert journal_extraction(capsys)["app_check"] == "ok"
+
+
+def test_required_app_check_refuses_scripts_before_reading_or_counting(extracteur):
+    client = client_avec(extracteur, app_check_obligatoire=True)
+    for entetes in (AUTH, {**AUTH, "X-Firebase-AppCheck": "forge"}):
+        assert client.post("/v1/extractions", json=COURRIER, headers=entetes).status_code == 401
+    assert extracteur.appels == []
+    # Refused calls did not use the user's quota (3 a minute in the tests).
+    bon = {**AUTH, "X-Firebase-AppCheck": "app-ok"}
+    for _ in range(3):
+        assert client.post("/v1/extractions", json=COURRIER, headers=bon).status_code == 200
+
+
+def test_required_app_check_outage_is_a_503(extracteur):
+    client = client_avec(extracteur, app_check_obligatoire=True)
+    reponse = client.post(
+        "/v1/extractions", json=COURRIER, headers={**AUTH, "X-Firebase-AppCheck": "app-panne"}
+    )
+    assert reponse.status_code == 503
+    assert reponse.headers["Retry-After"] == "30"
+
+
+def test_cors_lets_the_app_send_its_app_check_token(client):
+    reponse = client.options(
+        "/v1/extractions",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type,x-firebase-appcheck",
+        },
+    )
+    assert reponse.status_code == 200
+    assert "x-firebase-appcheck" in reponse.headers["access-control-allow-headers"].lower()
+
+
+def pdf(pages: int) -> dict:
+    ecrivain = PdfWriter()
+    for _ in range(pages):
+        ecrivain.add_blank_page(width=595, height=842)
+    tampon = io.BytesIO()
+    ecrivain.write(tampon)
+    return {"media_type": "application/pdf", "donnees_base64": base64.b64encode(tampon.getvalue()).decode()}
+
+
+def test_a_pdf_over_the_page_limit_never_reaches_the_extractor(extracteur):
+    client = client_avec(extracteur, taille_max_octets=100_000)
+    reponse = client.post("/v1/extractions", json={"fichier": pdf(3)}, headers=AUTH)
+    assert reponse.status_code == 422
+    assert "2 pages maximum" in reponse.json()["detail"]
+    assert extracteur.appels == []
+    assert client.post("/v1/extractions", json={"fichier": pdf(2)}, headers=AUTH).status_code == 200
+
+
+def test_a_broken_pdf_is_a_422_not_a_500(extracteur):
+    client = client_avec(extracteur, taille_max_octets=100_000)
+    casse = {"media_type": "application/pdf", "donnees_base64": base64.b64encode(b"%PDF-1.7 rien").decode()}
+    assert client.post("/v1/extractions", json={"fichier": casse}, headers=AUTH).status_code == 422
+    assert extracteur.appels == []

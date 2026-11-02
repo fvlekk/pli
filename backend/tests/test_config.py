@@ -26,3 +26,17 @@ def test_refuses_the_auth_emulator_on_cloud_run(monkeypatch):
     monkeypatch.setenv("K_SERVICE", "pli-api")
     with pytest.raises(RuntimeError):
         creer_app_depuis_env()
+
+
+def test_app_check_is_only_required_when_asked(monkeypatch):
+    monkeypatch.delenv("PLI_APP_CHECK", raising=False)
+    assert Config.depuis_env().app_check_obligatoire is False
+    monkeypatch.setenv("PLI_APP_CHECK", "1")
+    assert Config.depuis_env().app_check_obligatoire is True
+
+
+def test_pdf_page_limit_defaults_to_ten(monkeypatch):
+    monkeypatch.delenv("PLI_PAGES_MAX", raising=False)
+    assert Config.depuis_env().pages_max == 10
+    monkeypatch.setenv("PLI_PAGES_MAX", "4")
+    assert Config.depuis_env().pages_max == 4
