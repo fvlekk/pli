@@ -58,6 +58,9 @@ Future<Widget> _appConnectee() async {
 
   return PliApp(
     depot: DepotFirestore(FirebaseFirestore.instance, session.uid),
+    compte: session,
+    // Another account's list was opened: start again on it (new uid, new Firestore path).
+    onCompteChange: demarrer,
     lecteur: LecteurHttp(
       urlApi: Config.urlApi,
       jeton: session.jeton,

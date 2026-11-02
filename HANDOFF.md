@@ -75,5 +75,7 @@ Fixed on branch `fix/audit-2026-11-02` (backend 77 tests, app 40, rules 27):
   App Check, Installations. A script without the referrer now gets 403 (a forged referrer still passes: App
   Check is the real fix). A new app domain must be added to the key, or sign-in breaks.
 Still open:
-- The anonymous account lives in the browser: clearing it or changing phone loses everything. Linking an email
-  is a feature to decide (email link or password, recovery), not a fix.
+- Google sign-in (branch `feat/connexion-google`): still anonymous by default; a home card keeps the list with
+  Google (link: same uid, nothing lost) or, on an empty phone, opens the Google account's list (app restarts on
+  the new uid). Two lists are never merged: the user is told. Needs the Google provider enabled and
+  `pli-app-flame.vercel.app` in Auth authorized domains (Firebase console; the CLI was refused for the domain).
