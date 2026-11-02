@@ -70,7 +70,10 @@ Fixed on branch `fix/audit-2026-11-02` (backend 77 tests, app 40, rules 27):
 - App: retry screen instead of a blank page at start; « le service se réveille » after 8 s; no « retenu.. »;
   the detail sheet scrolls (a long summary hid its buttons); shared `CarteCliquable`, one `_lireFichier`,
   file size checked before base64. Rules tests run on Node 24. Unused `FORMATS_FICHIER` removed.
+- Firebase web API key restricted (2026-11-02, gcloud): referrers pli-app-flame.vercel.app,
+  plii-ba3d8.firebaseapp.com, localhost:5173, 127.0.0.1:5173; APIs Identity Toolkit, Secure Token, Firestore,
+  App Check, Installations. A script without the referrer now gets 403 (a forged referrer still passes: App
+  Check is the real fix). A new app domain must be added to the key, or sign-in breaks.
 Still open:
-- Firebase web API key not restricted (HTTP referrers + only the APIs in use): Google Cloud console.
 - The anonymous account lives in the browser: clearing it or changing phone loses everything. Linking an email
   is a feature to decide (email link or password, recovery), not a fix.
