@@ -36,7 +36,13 @@ fuser -k 8080/tcp
 
 # public web demo (no Firebase, no backend): build locally, Vercel has no Flutter. Project pli-demo.
 cd app && flutter build web --release --dart-define=PLI_DEMO=true   # web/vercel.json lands in build/web
-cd app/build/web && npx vercel link --yes --project pli-demo && rm -f .env.local && npx vercel deploy --prod
+cd app/build/web && npx vercel link --yes --project pli-demo && rm -f .env.local && npx vercel git disconnect --yes \
+  && npx vercel deploy --prod   # link inside this repo connects GitHub: disconnect, or pushes deploy a 404
+# real app (Firebase plii-ba3d8, backend on Render): same, into build/web-app, Vercel project pli-app
+cd app && flutter build web --release --no-wasm-dry-run --output build/web-app \
+  --dart-define=PLI_API_URL=https://pli-rif0.onrender.com --dart-define=PLI_FIREBASE_PROJET=plii-ba3d8 \
+  --dart-define=PLI_FIREBASE_APP_ID=... --dart-define=PLI_FIREBASE_API_KEY=... --dart-define=PLI_FIREBASE_SENDER_ID=...
+#   values: npx firebase apps:sdkconfig WEB --project plii-ba3d8 (public identifiers, not secrets)
 ```
 On web, the Firebase emulator banner covers the
 bottom button: remove `.firebase-emulator-warning` when scripting screenshots.

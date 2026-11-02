@@ -4,9 +4,16 @@
 Prototype on a Flutter, Python, Firestore, Google Cloud, GitLab CI and Claude Code stack, built for a job
 application to Buddy (full-stack & AI work-study role).
 
-## State (2026-11-01)
-- **Web demo live: https://pli-demo.vercel.app** (Vercel project `pli-demo`, branch
-  `style-buddy-simplification`). Flag `PLI_DEMO=true`: no Firebase, no backend. `app/lib/demo/` holds an in-memory store (3 made-up deadlines: late,
+## State (2026-11-02)
+- **Real app live: https://pli-app-flame.vercel.app** (Vercel project `pli-app`), checked end to end on
+  2026-11-02: a sample letter read by Claude, checked, saved to Firestore, shown on the home screen.
+  Firebase project `plii-ba3d8` on the free Spark plan (anonymous auth, Firestore in europe-west9, rules
+  deployed). Backend on **Render free** (https://pli-rif0.onrender.com, branch `main`, Docker, sleeps after
+  15 min, ~1 min to wake up): Google Cloud billing could not be set up (payment refused), so no Cloud Run.
+  Render env: `ANTHROPIC_API_KEY` (set by Falek in Render), `PLI_PROJET_FIREBASE=plii-ba3d8`,
+  `PLI_ORIGINES_CORS=https://pli-app-flame.vercel.app`, `PLI_REQUETES_PAR_MINUTE_INSTANCE=20`.
+  **No App Check yet**: keep the app URL private, rely on the Anthropic monthly cap.
+- **Web demo live: https://pli-demo.vercel.app** (Vercel project `pli-demo`). Flag `PLI_DEMO=true`: no Firebase, no backend. `app/lib/demo/` holds an in-memory store (3 made-up deadlines: late,
   this week, this month) and a reader that answers the 3 sample letters only. App: 33 tests, analyzer clean;
   every demo screen checked at 390 px. The bill reads 11 Nov (« avant le 12 » = X−1, the rule of
   `feat/eval-convention-sonnet-new-letters`).
@@ -26,6 +33,7 @@ application to Buddy (full-stack & AI work-study role).
 - On GitHub (public): `main` starts empty, the prototype comes in through the first pull request.
 
 ## Next step
+0. Before sharing the real app (e.g. with Buddy): Firebase App Check verified by the backend.
 1. With an Anthropic key: `cd backend && uv run python -m evals.run --extracteur claude --split test` (~14 calls).
    Paste the scores into the README table, then compare `PLI_EFFORT=low` against `medium`.
 2. Mirror to GitLab so `.gitlab-ci.yml` runs too (the stack Buddy uses).
@@ -43,4 +51,8 @@ application to Buddy (full-stack & AI work-study role).
 - Web only: some emoji (📬, 🏠, ⚡, 🏆) render black and white, because Flutter's CanvasKit falls back to a
   symbols font for them. Neither `fontFamilyFallback: ['Noto Color Emoji']` nor U+FE0F fixed it. Native
   Android/iOS use the system color emoji.
-- `feat/demo-web` (pushed) is the demo on the old design, superseded by `style-buddy-simplification`: delete it.
+- Vercel: `vercel link` run from a folder inside this repo connects the GitHub repo to the project, and every
+  push to `main` then deploys the raw repo (no Flutter build) over the app: both sites served 404 on
+  2026-11-02. Both projects are now disconnected (`vercel git disconnect`); redo it after any new link.
+- The live Claude reading gives « avant le 12/11 » as 12 Nov: the X−1 rule is only on the unmerged
+  `feat/eval-convention-sonnet-new-letters`.
