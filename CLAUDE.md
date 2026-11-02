@@ -41,8 +41,10 @@ cd app/build/web && npx vercel link --yes --project pli-demo && rm -f .env.local
 # real app (Firebase plii-ba3d8, backend on Render): same, into build/web-app, Vercel project pli-app
 cd app && flutter build web --release --no-wasm-dry-run --output build/web-app \
   --dart-define=PLI_API_URL=https://pli-rif0.onrender.com --dart-define=PLI_FIREBASE_PROJET=plii-ba3d8 \
-  --dart-define=PLI_FIREBASE_APP_ID=... --dart-define=PLI_FIREBASE_API_KEY=... --dart-define=PLI_FIREBASE_SENDER_ID=...
-#   values: npx firebase apps:sdkconfig WEB --project plii-ba3d8 (public identifiers, not secrets)
+  --dart-define=PLI_FIREBASE_APP_ID=... --dart-define=PLI_FIREBASE_API_KEY=... --dart-define=PLI_FIREBASE_SENDER_ID=... \
+  --dart-define=PLI_RECAPTCHA_CLE=...   # App Check (web only); empty = off
+#   values: npx firebase apps:sdkconfig WEB --project plii-ba3d8, reCAPTCHA v3 site key (all public, not secrets)
+#   backend: PLI_APP_CHECK=1 requires the App Check token; unset, it is only checked and logged (app_check: ...)
 ```
 On web, the Firebase emulator banner covers the
 bottom button: remove `.firebase-emulator-warning` when scripting screenshots.

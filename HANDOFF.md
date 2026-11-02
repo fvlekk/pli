@@ -57,27 +57,20 @@ application to Buddy (full-stack & AI work-study role).
 - The live Claude reading gives « avant le 12/11 » as 12 Nov: the X−1 rule is only on the unmerged
   `feat/eval-convention-sonnet-new-letters`.
 
-## Audit 2026-11-02 (to fix, by priority)
+## Audit 2026-11-02
 Checked live: backend endpoints (401/404/405/422/429, CORS, size limits), Firestore isolation on the real
 database (A cannot read, list or write B; malformed or out-of-path writes refused), rules 27/27 on the
 emulator, app flows on https://pli-app-flame.vercel.app (read, check, save, done, undo, delete, reload).
 No secret tracked by git.
-1. **High: Claude cost is open to scripts.** Anyone can create anonymous Firebase accounts with the public
-   API key (done with curl) and call the backend; the per-uid limit caps nothing, the instance cap (20/min)
-   allows ~28 800 readings a day. Fix: Firebase App Check verified by the backend; keep the Anthropic cap.
-2. **Medium: PDF cost amplification.** A 5 MB PDF (up to ~100 pages) goes whole to Opus. Cap the page count
-   (pypdf) before calling Claude.
-3. **Medium: Firestore quota (Spark).** No limit on documents per user: a script can burn the free daily
-   writes and block saving for everyone. Fix: App Check on Firestore too.
-4. Low: restrict the Firebase web API key (HTTP referrers + only Identity Toolkit and Firestore APIs).
-5. Robustness: if Firebase init or anonymous sign-in fails at startup (offline, ad blocker), `main()` throws
-   and the web app stays blank. Add an error screen with a retry.
-6. Robustness: the anonymous account lives in the browser; clearing it or changing phone loses everything
-   (email linking is still to build).
-7. Robustness: Render cold start (~1 min) shows only « Je lis ton courrier… »; say the service is waking up.
-8. Bug: « À vérifier » adds a period after a reason that already ends with one (« retenu.. »),
-   `verification.dart` `_phrase`.
-9. Tooling: `firebase` `npm test` runs `node --test tests/`, which Node 24 rejects; use `tests/*.test.js`.
-10. Simplify: `FORMATS_FICHIER` in `courrier.py` is unused (the `Literal` in `main.py` is the real list);
-    `LecteurHttp` base64-encodes the file before checking its size; the clickable-card code is duplicated
-    in `CarteEcheance` and `ajout.dart` `_Choix`; `_importer`/`_photographier` repeat the same try/catch.
+Fixed on branch `fix/audit-2026-11-02` (backend 77 tests, app 40, rules 27):
+- App Check: backend verifies `X-Firebase-AppCheck` (logged only, required with `PLI_APP_CHECK=1`); web app
+  activates it with a reCAPTCHA v3 key (`PLI_RECAPTCHA_CLE`). **Rollout still to do** (console steps: reCAPTCHA
+  key, App Check registration, then `PLI_APP_CHECK=1` on Render and enforcement on Firestore and Auth).
+- PDFs over `PLI_PAGES_MAX` (10) pages refused before Claude; broken or locked PDFs are a 422.
+- App: retry screen instead of a blank page at start; « le service se réveille » after 8 s; no « retenu.. »;
+  the detail sheet scrolls (a long summary hid its buttons); shared `CarteCliquable`, one `_lireFichier`,
+  file size checked before base64. Rules tests run on Node 24. Unused `FORMATS_FICHIER` removed.
+Still open:
+- Firebase web API key not restricted (HTTP referrers + only the APIs in use): Google Cloud console.
+- The anonymous account lives in the browser: clearing it or changing phone loses everything. Linking an email
+  is a feature to decide (email link or password, recovery), not a fix.
