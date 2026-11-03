@@ -9,6 +9,7 @@ import '../services/session.dart';
 import '../theme.dart';
 import '../widgets/carte_cliquable.dart';
 import '../widgets/carte_echeance.dart';
+import '../widgets/notification.dart';
 import 'ajout.dart';
 
 class EcranAccueil extends StatelessWidget {
@@ -28,13 +29,19 @@ class EcranAccueil extends StatelessWidget {
   final VoidCallback? onCompteChange;
 
   Future<void> _ajouter(BuildContext context) async {
-    final enregistree = await Navigator.of(context).push<bool>(
+    final enregistree = await Navigator.of(context).push<Echeance>(
       MaterialPageRoute(
         builder: (_) => EcranAjout(depot: depot, lecteur: lecteur, maintenant: maintenant),
       ),
     );
-    if (enregistree == true && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Échéance enregistrée')));
+    if (enregistree != null && context.mounted) {
+      notifier(
+        ScaffoldMessenger.of(context),
+        'Échéance enregistrée',
+        // No-break spaces: « avant le 11 nov. » never splits across two lines.
+        detail:
+            '${enregistree.titre} · avant\u00a0le\u00a0${dateCourte(enregistree.dateLimite).replaceAll(' ', '\u00a0')}',
+      );
     }
   }
 
@@ -177,11 +184,11 @@ class _Detail extends StatelessWidget {
     final messager = ScaffoldMessenger.of(context);
     Navigator.of(context).pop();
     await depot.marquerFait(echeance.id!, fait);
-    messager.showSnackBar(
-      SnackBar(
-        content: Text(fait ? 'Marqué comme fait' : 'Remis à faire'),
-        action: SnackBarAction(label: 'Annuler', onPressed: () => depot.marquerFait(echeance.id!, !fait)),
-      ),
+    notifier(
+      messager,
+      fait ? 'Marqué comme fait' : 'Remis à faire',
+      detail: echeance.titre,
+      action: SnackBarAction(label: 'Annuler', onPressed: () => depot.marquerFait(echeance.id!, !fait)),
     );
   }
 
@@ -307,14 +314,20 @@ class _CarteCompteState extends State<_CarteCompte> {
     try {
       switch (await widget.compte.garderAvecGoogle(listeVide: widget.listeVide)) {
         case ResultatGoogle.relie:
-          messager.showSnackBar(const SnackBar(content: Text('Tes échéances sont gardées avec ton compte Google')));
+          notifier(messager, 'Échéances gardées avec Google', detail: 'Tu les retrouveras sur un autre téléphone.');
         case ResultatGoogle.connecte:
           widget.onCompteChange?.call();
         case ResultatGoogle.annule:
           break;
       }
     } on CompteImpossible catch (e) {
-      messager.showSnackBar(SnackBar(content: Text(e.message), duration: const Duration(seconds: 8)));
+      notifier(
+        messager,
+        'Connexion Google impossible',
+        detail: e.message,
+        ton: TonNotification.alerte,
+        duree: const Duration(seconds: 8),
+      );
     } finally {
       if (mounted) setState(() => _enCours = false);
     }

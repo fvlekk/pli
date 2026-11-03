@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../config.dart';
 import '../exemples.dart';
+import '../modeles/echeance.dart';
 import '../outils/image_stub.dart' if (dart.library.js_interop) '../outils/image_web.dart';
 import '../outils/selection_stub.dart' if (dart.library.js_interop) '../outils/selection_web.dart';
 import '../services/depot_echeances.dart';
@@ -71,12 +72,12 @@ class _EcranAjoutState extends State<EcranAjout> {
     try {
       final lecture = await widget.lecteur.lire(courrier).whenComplete(() => _minuteurLent?.cancel());
       if (!mounted) return;
-      final enregistree = await Navigator.of(context).push<bool>(
+      final enregistree = await Navigator.of(context).push<Echeance>(
         MaterialPageRoute(
           builder: (_) => EcranVerification(lecture: lecture, depot: widget.depot, maintenant: widget.maintenant),
         ),
       );
-      if (enregistree == true && mounted) Navigator.of(context).pop(true);
+      if (enregistree != null && mounted) Navigator.of(context).pop(enregistree);
     } on LectureImpossible catch (e) {
       if (mounted) _signaler(e.message);
     } catch (_) {
