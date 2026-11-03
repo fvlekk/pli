@@ -196,6 +196,19 @@ void main() {
     expect(find.text('Réessayer'), findsOneWidget, reason: 'the button comes back if the retry failed too');
   });
 
+  testWidgets('an unexpected failure while reading is shown, never swallowed', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 2000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(PliApp(depot: FauxDepot(), lecteur: _LecteurEnPanne(), maintenant: () => aujourdhui));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ajouter un courrier'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Une amende'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('La lecture a échoué'), findsOneWidget);
+    expect(find.text('Je lis ton courrier…'), findsNothing, reason: 'the screen is usable again');
+  });
+
   group('Google account', () {
     Future<void> accueil(WidgetTester tester, FauxDepot depot, Compte? compte, {VoidCallback? onCompteChange}) async {
       await tester.binding.setSurfaceSize(const Size(420, 2000));
@@ -271,4 +284,10 @@ class _LecteurLent implements LecteurCourrier {
 
   @override
   Future<Lecture> lire(CourrierAEnvoyer courrier) => reponse.future;
+}
+
+/// Fails the way no screen expects (a token refresh, a bug): the user must still be told.
+class _LecteurEnPanne implements LecteurCourrier {
+  @override
+  Future<Lecture> lire(CourrierAEnvoyer courrier) async => throw StateError('jeton introuvable');
 }

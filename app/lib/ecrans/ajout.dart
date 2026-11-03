@@ -78,6 +78,9 @@ class _EcranAjoutState extends State<EcranAjout> {
       if (enregistree == true && mounted) Navigator.of(context).pop(true);
     } on LectureImpossible catch (e) {
       if (mounted) _signaler(e.message);
+    } catch (_) {
+      // Whatever else went wrong, the user must see that the reading stopped.
+      if (mounted) _signaler('La lecture a échoué. Réessaie dans un instant.');
     } finally {
       _minuteurLent?.cancel();
       if (mounted) {

@@ -70,6 +70,14 @@ class LecteurHttp implements LecteurCourrier {
       'recu_le': DateTime(aujourdhui.year, aujourdhui.month, aujourdhui.day).toIso8601String().substring(0, 10),
     };
 
+    final String connexion;
+    try {
+      connexion = await jeton();
+    } catch (_) {
+      // Renewing the sign-in token needs the network and, with App Check enforced, a fresh attestation.
+      throw const LectureImpossible('Ta connexion à Pli a expiré : recharge la page, puis réessaie.');
+    }
+
     final http.Response reponse;
     try {
       final app = await _jetonApp();
@@ -77,7 +85,7 @@ class LecteurHttp implements LecteurCourrier {
           .post(
             urlApi.resolve('/v1/extractions'),
             headers: {
-              'Authorization': 'Bearer ${await jeton()}',
+              'Authorization': 'Bearer $connexion',
               'Content-Type': 'application/json',
               if (app != null && app.isNotEmpty) 'X-Firebase-AppCheck': app,
             },
