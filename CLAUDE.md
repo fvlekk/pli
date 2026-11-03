@@ -1,7 +1,8 @@
 # Pli
 
 A mobile app that reads an administrative letter (tax notice, CAF, Assurance Maladie, fines...) and turns it into
-a deadline the user can't miss. Prototype (Flutter, Python, Firestore, Google Cloud).
+a deadline the user can't miss. Prototype (Flutter, Python, Firestore, Claude). Live: app on Vercel, backend on
+Render, Firebase `plii-ba3d8` with App Check enforced (state and URLs in `HANDOFF.md`).
 UI text is French; code, comments and docs are English.
 
 ## Layout
@@ -35,7 +36,8 @@ cd app && flutter run -d chrome --web-port 5173 \
 fuser -k 8080/tcp
 
 # public web demo (no Firebase, no backend): build locally, Vercel has no Flutter. Project pli-demo.
-cd app && flutter build web --release --dart-define=PLI_DEMO=true   # web/vercel.json lands in build/web
+cd app && flutter build web --release --no-wasm-dry-run --dart-define=PLI_DEMO=true   # web/vercel.json lands in build/web
+# always --no-wasm-dry-run: the wasm dry run can hang for many minutes
 cd app/build/web && npx vercel link --yes --project pli-demo && rm -f .env.local && npx vercel git disconnect --yes \
   && npx vercel deploy --prod   # link inside this repo connects GitHub: disconnect, or pushes deploy a 404
 # real app (Firebase plii-ba3d8, backend on Render): same, into build/web-app, Vercel project pli-app
@@ -48,6 +50,8 @@ cd app && flutter build web --release --no-wasm-dry-run --output build/web-app \
 ```
 On web, the Firebase emulator banner covers the
 bottom button: remove `.firebase-emulator-warning` when scripting screenshots.
+Test flows with Playwright **locally** (emulators + local backend): on the live app App Check is enforced and
+reCAPTCHA scores headless browsers as bots, so the app stops at its start screen.
 
 ## Invariants (a change that breaks one is refused in review)
 - **Evaluate before building.** Any change to the prompt, the model, the schema or the rule extractor comes with a

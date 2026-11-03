@@ -1,100 +1,45 @@
 # HANDOFF — Pli
 
 ## Why this repo exists
-Prototype on a Flutter, Python, Firestore, Google Cloud, GitLab CI and Claude Code stack, built for a job
-application to Buddy (full-stack & AI work-study role).
+Prototype for a job application to Buddy (full-stack & AI work-study): Flutter, Python, Firestore, Claude.
+Work happens in the worktree `~/projects/pli-demo` (branch `main`). `~/projects/pli` holds the older local branch
+`feat/eval-convention-sonnet-new-letters` (uncommitted eval work, older HANDOFF): don't start from there.
 
-## State (2026-11-03)
-- **Real app live: https://pli-app-flame.vercel.app** (Vercel project `pli-app`), checked end to end on
-  2026-11-02: a sample letter read by Claude, checked, saved to Firestore, shown on the home screen.
-  Firebase project `plii-ba3d8` on the free Spark plan (anonymous auth, Firestore in europe-west9, rules
-  deployed). Backend on **Render free** (https://pli-rif0.onrender.com, branch `main`, Docker, sleeps after
-  15 min, ~1 min to wake up): Google Cloud billing could not be set up (payment refused), so no Cloud Run.
-  Render env: `ANTHROPIC_API_KEY` (set by Falek in Render), `PLI_PROJET_FIREBASE=plii-ba3d8`,
-  `PLI_ORIGINES_CORS=https://pli-app-flame.vercel.app`, `PLI_REQUETES_PAR_MINUTE_INSTANCE=20`.
-  **App Check required by the backend** (`PLI_APP_CHECK=1`, 2026-11-03): a script without the app's token gets
-  401. Checked live end to end (token issued, reading by Claude, saved). Google sign-in available (optional).
-- **Web demo live: https://pli-demo.vercel.app** (Vercel project `pli-demo`). Flag `PLI_DEMO=true`: no Firebase, no backend. `app/lib/demo/` holds an in-memory store (3 made-up deadlines: late,
-  this week, this month) and a reader that answers the 3 sample letters only. App: 33 tests, analyzer clean;
-  every demo screen checked at 390 px. The bill reads 11 Nov (« avant le 12 » = X−1, the rule of
-  `feat/eval-convention-sonnet-new-letters`).
-- **Buddy restyle applied (2026-11-01)**: `pli-style-buddy.patch` (Baloo 2, coral, cards, pills, lilac « À FAIRE EN
-  PREMIER » card; postmark, folded sheet and stamp animation removed; `messages.parse`; simpler rate limiter).
-  Its Dart had never compiled: fixed a pill-row overflow on large text and an ambiguous test finder.
-  The Claude eval was not rerun after the `messages.parse` change (paid API, no go).
-- **Works locally, end to end**: emulators + backend + Flutter web. Read a sample letter, check it, save it
-  to Firestore, and see it on the home screen. Verified with Playwright screenshots (`docs/captures/`).
-- Backend: 62 pytest, ruff clean. Firestore rules: 27 tests on the emulator. App: 33 tests, analyzer clean.
-- Independent review (reviewer agent) done on 2026-10-12: every finding verified in the code, then fixed with a
-  test (list in README « What review caught »).
-- Eval: the rule extractor scores 9/10 on `dev` and 6/14 on `test`, with 1 silent error (an Urssaf reminder).
-  **The Claude extractor has never run against the real API** (no key here). Its tests use a fake client.
-- Not verified: the GitLab CI never ran on GitLab (the GitHub Actions copy of it runs on every PR), the PDF/photo paths were never sent to the API, and nothing ran on a real
-  Android/iOS device (web only).
-- On GitHub (public): `main` starts empty, the prototype comes in through the first pull request.
+## State (2026-11-03) — done, live, nothing open on GitHub (PRs #1–#16 merged)
+- **Real app: https://pli-app-flame.vercel.app** (Vercel `pli-app`). Firebase `plii-ba3d8` on Spark (anonymous
+  auth + optional Google sign-in, Firestore europe-west9). Backend on **Render free**
+  (https://pli-rif0.onrender.com, Docker from `main`; sleeps after 15 min, ~1 min to wake). No Cloud Run: Google
+  billing could not be set up. Render env: `ANTHROPIC_API_KEY`, `PLI_PROJET_FIREBASE=plii-ba3d8`,
+  `PLI_ORIGINES_CORS=https://pli-app-flame.vercel.app`, `PLI_REQUETES_PAR_MINUTE_INSTANCE=20`, `PLI_APP_CHECK=1`.
+- **Demo: https://pli-demo.vercel.app** (Vercel `pli-demo`, `PLI_DEMO=true`: no Firebase, no backend, 3 sample
+  letters with prepared readings).
+- **Security**: App Check (reCAPTCHA Enterprise key `6LffCQwu…`) enforced on the backend, Firestore and
+  Authentication; Firestore rules per user; Firebase web key restricted to the app's referrers and APIs; PDFs capped
+  at 10 pages; letters are data (`<courrier>` tags, look-alikes stripped); backend stores and logs no content.
+- **Checks**: backend 80 tests, app 52, Firestore rules 27/27 (emulator). Live flows checked: read (Claude), check,
+  save, done, undo, delete; photo shrinking and mobile file picking reproduced and fixed.
+- **Decision 2026-11-03**: no chat version. Pli keeps its own behaviour; a chat would be built later, inside
+  Buddy's agent, if Falek works there.
 
 ## Next step
-0. **Chat version (decided with Falek 2026-11-03), start in a fresh session in this worktree (`~/projects/pli-demo`).**
-   A « Parler à Pli » tab next to « Mes échéances », same app and URL: a Buddy-like agent (tutoiement, short,
-   warm), a « + » to attach a photo / PDF / pasted letter, suggestion chips, and an inline « Ajouter cette
-   échéance » card that opens the existing check screen (the agent never writes to Firestore).
-   - Backend `POST /v1/conversation`, stateless: the app sends the history (kept on the phone only) and a compact
-     list of the user's deadlines. With a document, run the evaluated extractor first, then Claude writes the
-     reply. Same App Check, ID token, rate limits, letter-as-data rules.
-   - Deadlines from a plain sentence (« la CAF veut mes papiers avant le 15 ») are allowed, **always
-     `a_verifier`**. Add synthetic conversation cases to the eval **before** building (CLAUDE.md invariant).
-   - Tests with a fake Claude (backend) and a fake conversation service (app). ~1–3 cents per exchange (Opus).
-1. With an Anthropic key: `cd backend && uv run python -m evals.run --extracteur claude --split test` (~14 calls).
-   Paste the scores into the README table, then compare `PLI_EFFORT=low` against `medium`.
-2. Mirror to GitLab so `.gitlab-ci.yml` runs too (the stack Buddy uses).
-3. Record the 30 s motion video from the real screens.
+1. Falek: test on his phone (reload first): a PDF, a photo, then « Garder mes échéances avec Google ».
+2. Optional, paid (ask first): `cd backend && uv run python -m evals.run --extracteur claude --split test`, scores
+   into the README. Never run since `messages.parse` and the look-alike tag fix.
+3. Optional: merge the X−1 rule (« avant le 12 » = 11) from `feat/eval-convention-sonnet-new-letters` (in
+   `~/projects/pli`): today the live reading says 12 Nov, the demo says 11. Mirror to GitLab; 30 s video.
 
-## À confirmer / open
-- npm audit: 17 findings, all in dev tooling (firebase-tools, emulator test libs). The "fixes" are downgrades
-  to old majors, so they are not applied. Nothing from them ships in the app or the backend.
-- Rate limiting is in memory: per uid + an instance-wide cap (60/min by default), times `--max-instances`.
-  **Before any public launch: Firebase App Check verified by the backend** (anonymous uids are free to create).
-- The model provider keeps API inputs under its own retention policy: production needs a zero-data-retention
-  agreement and a privacy notice that says so. The app copy only claims that *Pli* does not store the letter.
-- Reminders (FCM push at D-7 / D-1) are not built: today the app is the reminder.
-- Rule extractor titles are generic (« Payer (amende) »). Claude writes real ones.
-- Web only: some emoji (📬, 🏠, ⚡, 🏆) render black and white, because Flutter's CanvasKit falls back to a
-  symbols font for them. Neither `fontFamilyFallback: ['Noto Color Emoji']` nor U+FE0F fixed it. Native
-  Android/iOS use the system color emoji.
-- Vercel: `vercel link` run from a folder inside this repo connects the GitHub repo to the project, and every
-  push to `main` then deploys the raw repo (no Flutter build) over the app: both sites served 404 on
-  2026-11-02. Both projects are now disconnected (`vercel git disconnect`); redo it after any new link.
-- The live Claude reading gives « avant le 12/11 » as 12 Nov: the X−1 rule is only on the unmerged
-  `feat/eval-convention-sonnet-new-letters`.
+## Gotchas (cost us time)
+- Vercel: never let `vercel link` connect GitHub (the build folders sit inside the repo): every push to `main`
+  then deploys the raw repo and both sites serve 404. Both projects are disconnected; redo `vercel git disconnect`
+  after any new link. Deploy commands: `CLAUDE.md`.
+- `flutter build web` can hang in its wasm dry run: always pass `--no-wasm-dry-run`.
+- Since App Check is enforced, reCAPTCHA scores headless Playwright as a bot: automated checks of the **live** app
+  stop at « Pli n'arrive pas à démarrer ». Test flows locally with the emulators (`CLAUDE.md`), the live app by hand.
+- A new app domain must be added to the Firebase key's referrers, Auth authorized domains and the reCAPTCHA key.
+- Web emoji (📬 🏠 ⚡ 🏆) render black and white (CanvasKit font fallback); two fixes tried, none worked.
 
-## Audit 2026-11-02
-Checked live: backend endpoints (401/404/405/422/429, CORS, size limits), Firestore isolation on the real
-database (A cannot read, list or write B; malformed or out-of-path writes refused), rules 27/27 on the
-emulator, app flows on https://pli-app-flame.vercel.app (read, check, save, done, undo, delete, reload).
-No secret tracked by git.
-Fixed on branch `fix/audit-2026-11-02` (backend 77 tests, app 40, rules 27):
-- App Check: backend verifies `X-Firebase-AppCheck` (logged only, required with `PLI_APP_CHECK=1`); web app
-  activates it with a reCAPTCHA Enterprise key (`PLI_RECAPTCHA_CLE`, created and registered with gcloud and the
-  App Check API). Enforced on the backend, Cloud Firestore and Authentication (checked 2026-11-03: a script gets 401 from the
-  backend, 403 from Firestore, « App Check token is invalid » on sign-up; Auth took ~7 min to apply). The live
-  app still signs in, reads and saves.
-- PDFs over `PLI_PAGES_MAX` (10) pages refused before Claude; broken or locked PDFs are a 422.
-- App: retry screen instead of a blank page at start; « le service se réveille » after 8 s; no « retenu.. »;
-  the detail sheet scrolls (a long summary hid its buttons); shared `CarteCliquable`, one `_lireFichier`,
-  file size checked before base64. Rules tests run on Node 24. Unused `FORMATS_FICHIER` removed.
-- Firebase web API key restricted (2026-11-02, gcloud): referrers pli-app-flame.vercel.app,
-  plii-ba3d8.firebaseapp.com, localhost:5173, 127.0.0.1:5173; APIs Identity Toolkit, Secure Token, Firestore,
-  App Check, Installations. A script without the referrer now gets 403 (a forged referrer still passes: App
-  Check is the real fix). A new app domain must be added to the key, or sign-in breaks.
-- Look-alike tags (full-width ＜/courrier＞) are NFKC-normalised then stripped; ordinary letters reach Claude
-  unchanged. Web photos over 2000 px or 1.5 MB are shrunk in the browser (JPEG 0.85, upright, no EXIF):
-  checked in Chromium, 10.3 MB 4032x3024 → 1.4 MB 1500x2000.
-- Mobile web file picking (2026-11-03): file_picker took the page's focus coming back as a cancel after 500 ms
-  and dropped files a phone hands over later (Drive, Downloads): the user picked a PDF and nothing happened.
-  `cancelUploadOnWindowBlur: false` (outils/selection_*.dart). Reproduced and checked with a delayed hand-over
-  (0, 1.2 and 5 s). Any reading failure now shows a message (PR #13).
-Still open:
-- Google sign-in (branch `feat/connexion-google`): still anonymous by default; a home card keeps the list with
-  Google (link: same uid, nothing lost) or, on an empty phone, opens the Google account's list (app restarts on
-  the new uid). Two lists are never merged: the user is told. Needs the Google provider enabled and
-  `pli-app-flame.vercel.app` in Auth authorized domains (Firebase console; the CLI was refused for the domain).
+## Open points
+- The model provider keeps API inputs under its own policy: production needs zero data retention and a privacy
+  notice. Reminders (push D-7 / D-1) are not built: the app is the reminder. Two lists (device + Google account)
+  are never merged: the user is told.
+- npm audit: 17 findings in dev tooling only (fixes are downgrades, not applied).
