@@ -132,4 +132,22 @@ void main() {
       expect(recues['Authorization'], 'Bearer jeton-1');
     });
   });
+
+  test('a sign-in token that cannot be renewed gives an actionable message, no request', () async {
+    var appels = 0;
+    final client = MockClient((_) async {
+      appels++;
+      return json(reponseOk, 200);
+    });
+    final l = LecteurHttp(
+      urlApi: Uri.parse('https://api.pli.test'),
+      jeton: () async => throw StateError('App Check refusé'),
+      client: client,
+    );
+    await expectLater(
+      () => l.lire(const CourrierTexte('x')),
+      throwsA(isA<LectureImpossible>().having((e) => e.message, 'message', contains('recharge la page'))),
+    );
+    expect(appels, 0);
+  });
 }
