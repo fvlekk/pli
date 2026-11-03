@@ -13,6 +13,17 @@ UI text is French; code, comments and docs are English.
 | `backend/evals/` | Synthetic letters + expected answers. The extractor is judged here, never by eye. |
 | `firebase/` | `firestore.rules` + rules tests on the emulator. |
 
+## Carte
+- **Routes:** `backend/src/pli/main.py` — `GET /healthz`, `POST /v1/extractions` (ID token + App Check `auth.py`, rate
+  limit `limiteur.py`, PDF page cap `courrier.py`).
+- **Business logic:** `backend/src/pli/extracteurs/` (`regle.py` offline baseline, `claude.py`, `base.py`) · `schema.py`
+  (output + text limits) · `courrier.py` (letter input) · `journal.py` (logs without content). App: `app/lib/ecrans/`,
+  `services/` (`session.dart` = anonymous + Google account), `modeles/`, `outils/` (dates, photo shrinking, web file
+  picker), `widgets/` (cards, notices), `demo/` (PLI_DEMO), `theme.dart`.
+- **Tests:** `backend/tests/test_*.py` (pytest) · `backend/evals/` (`run.py`, `dataset/`, `attendu.jsonl`) ·
+  `app/test/*_test.dart` (fakes in `faux.dart`) · `firebase/tests/regles.test.js`. Invariants: see below.
+- **Agent hooks (local, not pushed):** `.claude/hooks/verify.sh` runs the checks of each changed part on Stop.
+
 ## Commands (run the ones for what you touched, before saying "done")
 ```bash
 # backend
