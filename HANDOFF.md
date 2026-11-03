@@ -34,6 +34,16 @@ application to Buddy (full-stack & AI work-study role).
 - On GitHub (public): `main` starts empty, the prototype comes in through the first pull request.
 
 ## Next step
+0. **Chat version (decided with Falek 2026-11-03), start in a fresh session in this worktree (`~/projects/pli-demo`).**
+   A « Parler à Pli » tab next to « Mes échéances », same app and URL: a Buddy-like agent (tutoiement, short,
+   warm), a « + » to attach a photo / PDF / pasted letter, suggestion chips, and an inline « Ajouter cette
+   échéance » card that opens the existing check screen (the agent never writes to Firestore).
+   - Backend `POST /v1/conversation`, stateless: the app sends the history (kept on the phone only) and a compact
+     list of the user's deadlines. With a document, run the evaluated extractor first, then Claude writes the
+     reply. Same App Check, ID token, rate limits, letter-as-data rules.
+   - Deadlines from a plain sentence (« la CAF veut mes papiers avant le 15 ») are allowed, **always
+     `a_verifier`**. Add synthetic conversation cases to the eval **before** building (CLAUDE.md invariant).
+   - Tests with a fake Claude (backend) and a fake conversation service (app). ~1–3 cents per exchange (Opus).
 1. With an Anthropic key: `cd backend && uv run python -m evals.run --extracteur claude --split test` (~14 calls).
    Paste the scores into the README table, then compare `PLI_EFFORT=low` against `medium`.
 2. Mirror to GitLab so `.gitlab-ci.yml` runs too (the stack Buddy uses).
