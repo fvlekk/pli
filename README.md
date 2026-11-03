@@ -4,7 +4,8 @@ Pli reads an administrative letter (a tax notice, a CAF letter, a fine) and turn
 won't miss. Take a photo, import a PDF or paste the text. Pli says what to do, for whom, by when, and how
 much. You check it, and it goes into a list sorted by urgency.
 
-Flutter app · Python backend on Cloud Run · Firestore · Claude for reading · GitLab CI.
+Flutter app · Python backend (Docker: on Render today, ready for Cloud Run) · Firestore · Claude for reading ·
+GitLab CI.
 
 **Live demo: [pli-demo.vercel.app](https://pli-demo.vercel.app).** It is built with `--dart-define=PLI_DEMO=true`:
 no Firebase and no backend, deadlines stay in memory, and only the three sample letters are read, with the
@@ -87,8 +88,8 @@ anything was committed. Each fix came with a test:
 ## Architecture
 
 ```
- Flutter app ──(Firebase ID token)──▶ Cloud Run: FastAPI ──▶ Claude (structured output)
-     │                                   │  verifies token, rate limit per uid,
+ Flutter app ──(ID token + App Check)──▶ FastAPI (Docker) ──▶ Claude (structured output)
+     │                                   │  verifies both tokens, rate limit per uid,
      │                                   │  5 MB max, stores nothing
      │                                   └─▶ rule extractor (baseline, no key)
      │
@@ -113,15 +114,19 @@ Without `ANTHROPIC_API_KEY` the backend uses the rule extractor. The add screen 
 
 | Part | Command | Today |
 |---|---|---|
-| Backend | `uv run ruff check . && uv run ruff format --check . && uv run pytest` | 62 tests |
+| Backend | `uv run ruff check . && uv run ruff format --check . && uv run pytest` | 80 tests |
 | Firestore rules | `npm test` (emulator) | 27 tests |
-| App | `dart format --set-exit-if-changed lib test && flutter analyze && flutter test` | 33 tests |
+| App | `dart format --set-exit-if-changed lib test && flutter analyze && flutter test` | 52 tests |
 | Eval | `uv run python -m evals.run --extracteur regle --split test` | see above |
 
 [.gitlab-ci.yml](.gitlab-ci.yml) runs each part when it changes, plus GitLab secret detection. The paid Claude
 eval only runs on merge requests that touch the extraction.
 
-## Deploying (not done yet)
+## Deploying
+
+Live today: the Flutter web app on Vercel (built locally: Vercel has no Flutter), the backend container on
+Render (free plan), Firebase Auth + Firestore + App Check on the Spark plan. Commands in `CLAUDE.md`.
+The same container is ready for Cloud Run (needs billing on the Google project):
 
 ```bash
 gcloud secrets create anthropic-key --data-file=-          # paste the key, never in the repo
