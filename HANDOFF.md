@@ -34,8 +34,8 @@ application to Buddy (full-stack & AI work-study role).
 - On GitHub (public): `main` starts empty, the prototype comes in through the first pull request.
 
 ## Next step
-0. Enforce App Check on Cloud Firestore and Authentication (Firebase console, App Check > APIs): until then a
-   script can still create anonymous accounts and write its own Firestore documents (never another user's).
+0. Optional: enforce App Check on Authentication (Firebase console, App Check > APIs). Until then a script can
+   still create empty anonymous accounts, but they can neither use Firestore nor call the backend (checked).
 1. With an Anthropic key: `cd backend && uv run python -m evals.run --extracteur claude --split test` (~14 calls).
    Paste the scores into the README table, then compare `PLI_EFFORT=low` against `medium`.
 2. Mirror to GitLab so `.gitlab-ci.yml` runs too (the stack Buddy uses).
@@ -67,7 +67,8 @@ No secret tracked by git.
 Fixed on branch `fix/audit-2026-11-02` (backend 77 tests, app 40, rules 27):
 - App Check: backend verifies `X-Firebase-AppCheck` (logged only, required with `PLI_APP_CHECK=1`); web app
   activates it with a reCAPTCHA Enterprise key (`PLI_RECAPTCHA_CLE`, created and registered with gcloud and the
-  App Check API). Backend enforcement on since 2026-11-03; Firestore and Auth enforcement still to switch on.
+  App Check API). Enforced on the backend and on Cloud Firestore (checked 2026-11-03: a scripted account gets 401 from the
+  backend and 403 from Firestore); Authentication not enforced (optional).
 - PDFs over `PLI_PAGES_MAX` (10) pages refused before Claude; broken or locked PDFs are a 422.
 - App: retry screen instead of a blank page at start; « le service se réveille » after 8 s; no « retenu.. »;
   the detail sheet scrolls (a long summary hid its buttons); shared `CarteCliquable`, one `_lireFichier`,
