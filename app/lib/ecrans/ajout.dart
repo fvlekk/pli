@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../config.dart';
 import '../exemples.dart';
 import '../outils/image_stub.dart' if (dart.library.js_interop) '../outils/image_web.dart';
+import '../outils/selection_stub.dart' if (dart.library.js_interop) '../outils/selection_web.dart';
 import '../services/depot_echeances.dart';
 import '../services/lecteur_courrier.dart';
 import '../theme.dart';
@@ -114,7 +115,11 @@ class _EcranAjoutState extends State<EcranAjout> {
   }
 
   Future<void> _importer() => _lireFichier(() async {
-    final fichier = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: _typesFichier.keys.toList());
+    final fichier = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: _typesFichier.keys.toList(),
+      webOptions: optionsSelection,
+    );
     if (fichier == null) return null;
     final type = _typesFichier[fichier.extension?.toLowerCase()];
     if (type == null) {

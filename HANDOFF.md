@@ -79,6 +79,10 @@ Fixed on branch `fix/audit-2026-11-02` (backend 77 tests, app 40, rules 27):
 - Look-alike tags (full-width ＜/courrier＞) are NFKC-normalised then stripped; ordinary letters reach Claude
   unchanged. Web photos over 2000 px or 1.5 MB are shrunk in the browser (JPEG 0.85, upright, no EXIF):
   checked in Chromium, 10.3 MB 4032x3024 → 1.4 MB 1500x2000.
+- Mobile web file picking (2026-11-03): file_picker took the page's focus coming back as a cancel after 500 ms
+  and dropped files a phone hands over later (Drive, Downloads): the user picked a PDF and nothing happened.
+  `cancelUploadOnWindowBlur: false` (outils/selection_*.dart). Reproduced and checked with a delayed hand-over
+  (0, 1.2 and 5 s). Any reading failure now shows a message (PR #13).
 Still open:
 - Google sign-in (branch `feat/connexion-google`): still anonymous by default; a home card keeps the list with
   Google (link: same uid, nothing lost) or, on an empty phone, opens the Google account's list (app restarts on
