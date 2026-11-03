@@ -2,10 +2,10 @@
 
 ## Why this repo exists
 Prototype for a job application to Buddy (full-stack & AI work-study): Flutter, Python, Firestore, Claude.
-Work happens in the worktree `~/projects/pli-demo` (branch `main`). `~/projects/pli` holds the older local branch
-`feat/eval-convention-sonnet-new-letters` (uncommitted eval work, older HANDOFF): don't start from there.
+Work in `~/projects/pli` (branch `main`): the only working folder. Local, never pushed: `.claude/hooks/verify.sh`
+and `.github/workflows/ci.yml` (the GitHub token lacks the `workflow` scope). Vercel links are in `app/build/*/.vercel`.
 
-## State (2026-11-03) — done, live, nothing open on GitHub (PRs #1–#16 merged)
+## State (2026-11-03) — done, live, nothing open on GitHub (PRs #1–#18 merged)
 - **Real app: https://pli-app-flame.vercel.app** (Vercel `pli-app`). Firebase `plii-ba3d8` on Spark (anonymous
   auth + optional Google sign-in, Firestore europe-west9). Backend on **Render free**
   (https://pli-rif0.onrender.com, Docker from `main`; sleeps after 15 min, ~1 min to wake). No Cloud Run: Google
