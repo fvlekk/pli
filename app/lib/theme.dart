@@ -156,9 +156,17 @@ ThemeData themePli() {
       focusedBorder: champ.copyWith(borderSide: const BorderSide(color: Couleurs.corail, width: 2)),
     ),
     progressIndicatorTheme: const ProgressIndicatorThemeData(color: Couleurs.corail),
-    snackBarTheme: const SnackBarThemeData(
-      backgroundColor: Couleurs.encre,
-      contentTextStyle: TextStyle(fontFamily: _police, fontSize: 15, color: Colors.white),
+    // Notices are small white cards like the rest of the app (see widgets/notification.dart).
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: Couleurs.carte,
+      elevation: 6,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Rayons.carte),
+        side: const BorderSide(color: Couleurs.bord),
+      ),
+      insetPadding: const EdgeInsets.fromLTRB(Espaces.l, 0, Espaces.l, Espaces.m),
+      contentTextStyle: Textes.corps,
+      actionTextColor: Couleurs.corail,
       behavior: SnackBarBehavior.floating,
     ),
   );

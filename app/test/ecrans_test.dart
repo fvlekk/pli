@@ -82,6 +82,11 @@ void main() {
     expect(depot.ajoutees.single.titre, 'Payer l\'amende');
     expect(depot.ajoutees.single.dateLimite, DateTime(2026, 10, 18));
     expect(find.text('Échéance enregistrée'), findsOneWidget);
+    expect(
+      find.text('Payer l\'amende · avant\u00a0le\u00a018\u00a0oct.'),
+      findsOneWidget,
+      reason: 'says what was kept, and for when',
+    );
     expect(find.text('Payer l\'amende'), findsOneWidget);
   });
 
@@ -231,7 +236,7 @@ void main() {
       await tester.tap(find.text('Garder mes échéances avec Google'));
       await tester.pumpAndSettle();
       expect(compte.demandes, [false], reason: 'deadlines here: link, never replace');
-      expect(find.text('Tes échéances sont gardées avec ton compte Google'), findsOneWidget);
+      expect(find.text('Échéances gardées avec Google'), findsOneWidget);
       expect(find.text('Garder mes échéances avec Google'), findsNothing);
     });
 

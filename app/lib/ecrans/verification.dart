@@ -8,6 +8,7 @@ import '../outils/dates.dart';
 import '../services/depot_echeances.dart';
 import '../theme.dart';
 import '../widgets/carte_echeance.dart';
+import '../widgets/notification.dart';
 
 /// The user checks what was read before anything is saved. This screen is the verification step.
 class EcranVerification extends StatefulWidget {
@@ -97,14 +98,19 @@ class _EcranVerificationState extends State<EcranVerification> {
     );
     try {
       await widget.depot.ajouter(echeance);
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) Navigator.of(context).pop(echeance);
     } on FirebaseException catch (e) {
       if (!mounted) return;
       setState(() => _enregistrement = false);
       final message = e.code == 'permission-denied'
           ? 'Cette échéance n\'a pas pu être enregistrée : un champ n\'est pas valide. Corrige-le et réessaie.'
           : 'Enregistrement impossible. Vérifie ta connexion et réessaie.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      notifier(
+        ScaffoldMessenger.of(context),
+        'Enregistrement impossible',
+        detail: message,
+        ton: TonNotification.alerte,
+      );
     }
   }
 
