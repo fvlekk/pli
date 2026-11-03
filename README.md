@@ -25,11 +25,14 @@ lilac. The visual style (Baloo 2, coral accent, rounded cards, pills) follows Bu
 ## Decisions that shape the code
 
 **1. Measure before building.** The eval set ([backend/evals](backend/evals)) came before the extractors:
-24 synthetic letters, each with its expected answer. Each one is built around a trap: relative deadlines
+51 synthetic letters, each with its expected answer. Each one is built around a trap: relative deadlines
 (« deux mois avant l'expiration »), three amounts on one fine, letters with dates but nothing to do, deadlines
-that depend on the département, and a letter that tries a prompt injection. Ambiguous cases follow a written
-rule in [attendu.jsonl](backend/evals/attendu.jsonl). The `dev` split (10) is for tuning. The `test` split (14)
-is run once per change and never tuned on.
+that depend on the département, an automatic direct debit, a date with no year, and letters that try a prompt
+injection. Ambiguous cases follow a written rule in [attendu.jsonl](backend/evals/attendu.jsonl); « avant le 25 »
+counts as the 24th, the safe reading. The `dev` split (10) is for tuning. The `test` split (14) is run once per
+change and never tuned on. The `inedit` split (12) was written after the extractors, to check that they
+generalise; it is never tuned on either. The `inedit2` split (15) was written after the rule extractor was
+reworked on the first 36 letters, with wordings it had never seen, and is held out for both extractors.
 
 **2. A late deadline is the worst error.** Accuracy per field is not the headline. The headline is
 `erreurs_silencieuses`: a deadline that is missing or later than the real one, and that the app does not flag.
@@ -52,18 +55,41 @@ check the shape of every document, and the creation date must be the server's.
 
 ## Results so far
 
-Rule extractor (the baseline), `python -m evals.run`:
+Rule extractor (the baseline), `python -m evals.run`, fully right:
 
-| Split | Fully right | Date | Amount | Action | Silent errors |
+| Version | dev (10) | test (14) | inedit (12) | **inedit2 (15, never seen)** | Silent errors |
 |---|---|---|---|---|---|
-| dev (10, tuned on) | 9/10 | 9/10 | 10/10 | 10/10 | 0 |
-| **test (14, held out)** | **6/14** | 9/14 | 10/14 | 11/14 | **1** |
+| first version, written on `dev` | 9/10 | 6/14 | 7/12 | — | 1 |
+| reworked on the first 36 letters (2026-10-31) | 10/10 | 14/14 | 12/12 | **7/15** | **1** (on `inedit2`) |
 
-The gap between the two splits is overfitting, and it is the point of keeping `test` aside. The silent error is
-an Urssaf reminder the rules read as « nothing to do ». Without the eval, that one would have gone unnoticed.
+The rework added general rules, each with a unit test: the gesture and the amount are read in the deadline's
+sentence first, delays in months and in words, « N mois avant » a date written earlier, periods, dates with no
+year, deadlines by département from the address's postcode, reduced amounts and totals, penalties skipped,
+instructions to a reader flagged. It reaches 36/36 on the letters it was tuned on, and 7/15 on letters it had
+never seen. Its silent error there is an appointment « fixé au mardi 17 novembre »: no rule matched, so it read
+« nothing to do ». Keyword rules learn the wordings they were written on; new wordings break them. That gap is
+the case for the model, and the reason the rules stay a fallback that flags its doubts, not the main reader.
 
-The Claude extractor has not been run on the eval yet (it needs an API key, about 14 calls). It is next, with
-the effort level (`low` vs `medium`) as the first thing to compare.
+Claude extractor, effort `medium`, with the « avant le » rule in the prompt (2026-10-30), fully right per split:
+
+| Model | dev (10) | test (14) | inedit (12) | inedit2 (15) | Silent errors | Cost per letter |
+|---|---|---|---|---|---|---|
+| **`claude-opus-5-5`** (default) | **10/10** | **14/14** | **12/12** | **15/15** | **0** | ~0.006 $ |
+| `claude-sonnet-5-5` | 9/10 | 14/14 | 11/12 | — | 1 | ~0.003 $ |
+| `claude-haiku-5-5` | — | 8/14 | 10/12 | — | 5 | ~0.0002 $ |
+
+Sonnet's silent error is the fine with three deadlines (`dev_04`): it kept a deadline 15 days too late, the
+penalty case. Haiku ignores the « avant le » rule and reads five deadlines a day late. All three models read both
+prompt-injection letters correctly and flag them. So Opus stays the default: it costs about 3 thousandths of a
+dollar more per letter than Sonnet, against a missed penalty deadline.
+
+The Opus row is the last run, after the prompt got a one-line definition for each of the 8 actions and the rule
+« the gesture asked, not the situation ». That rule came from `inedit_05` (a Carte Vitale form to send back, a
+first card or a renewal alike): its label moved from `renouveler` to `envoyer_documents`, and the other 35 labels
+already followed it. The Sonnet and Haiku rows are from the run before the definitions.
+
+Before the « avant le » rule, Opus scored 13/14 on `test` at `medium` and 12/14 at `low` (about 15 % cheaper),
+both without silent errors, so `medium` stays the default effort.
 
 ## What review caught
 
@@ -114,7 +140,7 @@ Without `ANTHROPIC_API_KEY` the backend uses the rule extractor. The add screen 
 
 | Part | Command | Today |
 |---|---|---|
-| Backend | `uv run ruff check . && uv run ruff format --check . && uv run pytest` | 80 tests |
+| Backend | `uv run ruff check . && uv run ruff format --check . && uv run pytest` | 100 tests |
 | Firestore rules | `npm test` (emulator) | 27 tests |
 | App | `dart format --set-exit-if-changed lib test && flutter analyze && flutter test` | 52 tests |
 | Eval | `uv run python -m evals.run --extracteur regle --split test` | see above |

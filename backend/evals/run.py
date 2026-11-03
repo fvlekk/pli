@@ -151,7 +151,7 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--extracteur", choices=["regle", "claude"], default="regle")
-    parser.add_argument("--split", choices=["dev", "test", "tout"], default="dev")
+    parser.add_argument("--split", choices=["dev", "test", "inedit", "inedit2", "tout"], default="dev")
     parser.add_argument(
         "--max-silencieuses", type=int, default=None, help="exit 1 above this many silent errors"
     )

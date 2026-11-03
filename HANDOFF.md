@@ -16,8 +16,11 @@ Work happens in the worktree `~/projects/pli-demo` (branch `main`). `~/projects/
 - **Security**: App Check (reCAPTCHA Enterprise key `6LffCQwu…`) enforced on the backend, Firestore and
   Authentication; Firestore rules per user; Firebase web key restricted to the app's referrers and APIs; PDFs capped
   at 10 pages; letters are data (`<courrier>` tags, look-alikes stripped); backend stores and logs no content.
-- **Checks**: backend 80 tests, app 52, Firestore rules 27/27 (emulator). Live flows checked: read (Claude), check,
+- **Checks**: backend 100 tests, app 52, Firestore rules 27/27 (emulator). Live flows checked: read (Claude), check,
   save, done, undo, delete; photo shrinking and mobile file picking reproduced and fixed.
+- **Eval** (merged 2026-11-03): « avant le X » = X−1 in the prompt and the labels, rule extractor rework,
+  `inedit` and `inedit2` held-out splits. Rules: 10/10, 14/14, 12/12, **7/15 on unseen letters** (1 silent error).
+  Opus 5.5 (2026-10-30 run): 51/51, 0 silent error. Tables in the README.
 - **Decision 2026-11-03**: no chat version. Pli keeps its own behaviour; a chat would be built later, inside
   Buddy's agent, if Falek works there.
 
@@ -25,8 +28,8 @@ Work happens in the worktree `~/projects/pli-demo` (branch `main`). `~/projects/
 1. Falek: test on his phone (reload first): a PDF, a photo, then « Garder mes échéances avec Google ».
 2. Optional, paid (ask first): `cd backend && uv run python -m evals.run --extracteur claude --split test`, scores
    into the README. Never run since `messages.parse` and the look-alike tag fix.
-3. Optional: merge the X−1 rule (« avant le 12 » = 11) from `feat/eval-convention-sonnet-new-letters` (in
-   `~/projects/pli`): today the live reading says 12 Nov, the demo says 11. Mirror to GitLab; 30 s video.
+3. Optional: mirror to GitLab; 30 s video. Render must be redeployed once for the new prompt (X−1 rule, action
+   definitions) to reach the live app.
 
 ## Gotchas (cost us time)
 - Vercel: never let `vercel link` connect GitHub (the build folders sit inside the repo): every push to `main`
