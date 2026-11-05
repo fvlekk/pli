@@ -7,7 +7,9 @@ import 'package:pli/app.dart';
 import 'package:pli/ecrans/ajout.dart';
 import 'package:pli/ecrans/demarrage.dart';
 import 'package:pli/ecrans/verification.dart';
+import 'package:pli/modeles/echeance.dart';
 import 'package:pli/modeles/lecture.dart';
+import 'package:pli/services/depot_echeances.dart';
 import 'package:pli/services/lecteur_courrier.dart';
 import 'package:pli/services/session.dart';
 import 'package:pli/theme.dart';
@@ -21,6 +23,13 @@ Widget verification(FauxDepot depot, {required dynamic l}) => MaterialApp(
   theme: themePli(),
   home: EcranVerification(lecture: l, depot: depot, maintenant: () => aujourdhui),
 );
+
+/// The samples sit at the bottom of the add screen, built only once close to the screen.
+Future<void> montrerLExemple(WidgetTester tester) async {
+  await tester.scrollUntilVisible(find.text('Une amende'), 200, scrollable: find.byType(Scrollable).last);
+  await tester.ensureVisible(find.text('Une amende'));
+  await tester.pumpAndSettle();
+}
 
 void main() {
   setUpAll(() => initializeDateFormatting('fr'));
@@ -70,7 +79,7 @@ void main() {
 
     await tester.tap(find.text('Ajouter un courrier'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Une amende'), 200, scrollable: find.byType(Scrollable).first);
+    await montrerLExemple(tester);
     await tester.tap(find.text('Une amende'));
     await tester.pumpAndSettle();
 
@@ -96,7 +105,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ajouter un courrier'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Une amende'), 200, scrollable: find.byType(Scrollable).first);
+    await montrerLExemple(tester);
     await tester.tap(find.text('Une amende'));
     await tester.pumpAndSettle();
     expect(find.text('Pas de connexion au service de lecture.'), findsOneWidget);
@@ -171,7 +180,7 @@ void main() {
     expect(find.text('Je lis ton courrier…'), findsOneWidget);
     await tester.pump(attenteLente + const Duration(seconds: 1));
     expect(find.text('Le service se réveille, ça peut prendre une minute…'), findsOneWidget);
-    lecteur.reponse.complete(lecture());
+    lecteur.attendue.complete(lecture());
     await tester.pumpAndSettle();
     expect(find.text('Vérifie avant d\'enregistrer'), findsOneWidget);
   });
@@ -281,18 +290,350 @@ void main() {
       expect(find.textContaining('avec Google'), findsNothing);
     });
   });
+
+  testWidgets('opening the add screen wakes the backend and names who reads the letter', (tester) async {
+    final lecteur = FauxLecteur();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: themePli(),
+        home: EcranAjout(depot: FauxDepot(), lecteur: lecteur, maintenant: () => aujourdhui),
+      ),
+    );
+    await tester.pump();
+    expect(lecteur.reveils, 1);
+    expect(find.textContaining('Claude (Anthropic)'), findsOneWidget);
+  });
+
+  /// Goes from the list to the save button, through the whole app.
+  Future<void> jusquAEnregistrer(WidgetTester tester, FauxDepot depot) async {
+    await tester.pumpWidget(appli(depot, lecteur: FauxLecteur(reponse: lecture())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ajouter un courrier'));
+    await tester.pumpAndSettle();
+    await montrerLExemple(tester);
+    await tester.tap(find.text('Une amende'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enregistrer l\'échéance'));
+    await tester.pump();
+  }
+
+  Future<void> jusquAuRetourSansReseau(WidgetTester tester, FauxDepot depot) async {
+    await jusquAEnregistrer(tester, depot);
+    await tester.pump(attenteEnregistrement + const Duration(seconds: 1));
+    await tester.pump();
+    expect(find.text('Pas encore enregistrée'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('saving without network never announces a success, and never writes twice', (tester) async {
+    final depot = _DepotSansReseau();
+    await jusquAuRetourSansReseau(tester, depot);
+
+    expect(find.text('Ajouter un courrier'), findsOneWidget, reason: 'back to the list');
+    expect(find.text('Échéance enregistrée'), findsNothing);
+    expect(depot.ajoutees, hasLength(1));
+
+    depot.reponse.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Échéance enregistrée'), findsOneWidget, reason: 'the server has it now');
+  });
+
+  testWidgets('a write refused after the wait is still reported', (tester) async {
+    final depot = _DepotSansReseau();
+    await jusquAuRetourSansReseau(tester, depot);
+
+    depot.reponse.completeError(Exception('permission-denied'));
+    await tester.pumpAndSettle();
+    expect(find.text('Échéance non enregistrée'), findsOneWidget);
+    expect(find.textContaining('ajoute-la de nouveau'), findsOneWidget);
+    expect(find.text('Échéance enregistrée'), findsNothing);
+  });
+
+  testWidgets('going back is blocked while a save is waiting for its answer', (tester) async {
+    final depot = _DepotSansReseau();
+    await jusquAEnregistrer(tester, depot);
+    await tester.tap(find.byType(BackButton));
+    await tester.pump(); // a first frame starts the page transition, the next one ends it
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Vérifie avant d\'enregistrer'), findsOneWidget);
+    await tester.pump(attenteEnregistrement);
+    await tester.pump();
+  });
+
+  testWidgets('an unexpected failure while saving is shown, and the screen stays usable', (tester) async {
+    final depot = _DepotCasse();
+    await jusquAEnregistrer(tester, depot);
+    await tester.pumpAndSettle();
+    expect(find.text('Enregistrement impossible'), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Vérifie avant d\'enregistrer'), findsNothing, reason: 'the user can leave');
+  });
+
+  testWidgets('coming back to the app the next day updates the countdown', (tester) async {
+    var jour = DateTime(2026, 10, 17);
+    await tester.pumpWidget(PliApp(depot: FauxDepot([echeance()]), lecteur: FauxLecteur(), maintenant: () => jour));
+    await tester.pumpAndSettle();
+    expect(find.text('Demain'), findsOneWidget);
+    jour = DateTime(2026, 10, 18);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(find.text('Aujourd\'hui'), findsOneWidget);
+  });
+
+  testWidgets('the list keeps one Firestore listener when the screen rebuilds', (tester) async {
+    final depot = _DepotCompteur();
+    await tester.pumpWidget(appli(depot));
+    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(depot.ecoutes, 1);
+  });
+
+  testWidgets('after a change of account, nothing says the new list is empty before it has answered', (tester) async {
+    await tester.pumpWidget(appli(FauxDepot()));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Aucun courrier'), findsOneWidget);
+    await tester.pumpWidget(appli(_DepotMuet()));
+    await tester.pump();
+    expect(find.textContaining('Aucun courrier'), findsNothing);
+    expect(find.text('Chargement… Vérifie ta connexion si ça dure.'), findsOneWidget);
+  });
+
+  test('an empty cache only hides the list until it has been loaded once', () {
+    List<bool> suite(List<(bool, bool)> instantanes) {
+      final filtre = filtreListeChargee();
+      return [for (final (vide, duCache) in instantanes) filtre(vide: vide, duCache: duCache)];
+    }
+
+    expect(suite([(true, true)]), [false], reason: 'offline start');
+    expect(suite([(true, true), (true, false)]), [false, true], reason: 'the server says it is really empty');
+    expect(suite([(false, true), (true, true)]), [true, true], reason: 'last item deleted offline');
+    expect(suite([(true, false), (true, true)]), [true, true], reason: 'empty, then the connection drops');
+  });
+
+  testWidgets('after a change of account, the list shown is the new account\'s', (tester) async {
+    await tester.pumpWidget(appli(FauxDepot([echeance(titre: 'Liste du téléphone')])));
+    await tester.pumpAndSettle();
+    expect(find.text('Liste du téléphone'), findsOneWidget);
+    await tester.pumpWidget(appli(FauxDepot([echeance(titre: 'Liste Google')])));
+    await tester.pumpAndSettle();
+    expect(find.text('Liste Google'), findsOneWidget);
+    expect(find.text('Liste du téléphone'), findsNothing);
+  });
+
+  testWidgets('an information letter closes with « Compris » and saves nothing', (tester) async {
+    final depot = FauxDepot();
+    await tester.pumpWidget(
+      appli(
+        depot,
+        lecteur: FauxLecteur(reponse: lecture(action: 'aucune', sansDate: true)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ajouter un courrier'));
+    await tester.pumpAndSettle();
+    await montrerLExemple(tester);
+    await tester.tap(find.text('Une amende'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Compris'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Compris'), findsNothing);
+    expect(find.text('Échéance enregistrée'), findsNothing);
+    expect(depot.ajoutees, isEmpty);
+  });
+
+  testWidgets('without any reading, a deadline can be entered by hand', (tester) async {
+    final depot = FauxDepot();
+    await tester.pumpWidget(appli(depot));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ajouter un courrier'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Saisir à la main'));
+    await tester.pumpAndSettle();
+    expect(find.text('CE QUE PLI A LU'), findsNothing);
+    await tester.enterText(find.byType(TextField).first, 'Renvoyer le dossier');
+    await tester.tap(find.text('Choisir une date'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enregistrer l\'échéance'));
+    await tester.pumpAndSettle();
+    expect(depot.ajoutees.single.titre, 'Renvoyer le dossier');
+    expect(depot.ajoutees.single.source, 'manuel');
+    expect(depot.ajoutees.single.aVerifier, isFalse);
+    expect(find.text('Échéance enregistrée'), findsOneWidget);
+  });
+
+  for (final faux in ['1.234', '87,425', '1e5', '-0', '-5', '1000000', 'abc']) {
+    testWidgets('an amount like $faux is refused, not saved as something else', (tester) async {
+      final depot = FauxDepot();
+      await tester.pumpWidget(verification(depot, l: lecture()));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Montant (facultatif)'), faux);
+      await tester.tap(find.text('Enregistrer l\'échéance'));
+      await tester.pumpAndSettle();
+      expect(depot.ajoutees, isEmpty);
+      expect(find.text('Écris un montant comme 90 ou 87,42'), findsOneWidget);
+    });
+  }
+
+  for (final (saisie, valeur) in [('90', 90.0), ('87,42', 87.42), ('1 234,5 €', 1234.5), ('12.50', 12.5)]) {
+    testWidgets('the amount $saisie is saved as $valeur', (tester) async {
+      final depot = FauxDepot();
+      await tester.pumpWidget(verification(depot, l: lecture()));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Montant (facultatif)'), saisie);
+      await tester.tap(find.text('Enregistrer l\'échéance'));
+      await tester.pumpAndSettle();
+      expect(depot.ajoutees.single.montant, valeur);
+    });
+  }
+
+  testWidgets('a deadline entered by hand shows no sender and no empty summary', (tester) async {
+    final depot = FauxDepot([
+      Echeance(
+        id: 'm',
+        organisme: 'autre',
+        organismeNom: 'Saisie à la main',
+        action: 'demander',
+        titre: 'Renvoyer le dossier',
+        dateLimite: DateTime(2026, 10, 25),
+        montant: null,
+        resume: '',
+        aVerifier: false,
+        source: 'manuel',
+        fait: false,
+      ),
+    ]);
+    await tester.pumpWidget(appli(depot));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Renvoyer le dossier'));
+    await tester.pumpAndSettle();
+    expect(find.text('C\'est fait'), findsOneWidget);
+    expect(find.text('Saisie à la main'), findsNothing);
+  });
+
+  testWidgets('the wait for the list says what to check', (tester) async {
+    final depot = _DepotMuet();
+    await tester.pumpWidget(appli(depot));
+    await tester.pump();
+    expect(find.text('Chargement… Vérifie ta connexion si ça dure.'), findsOneWidget);
+    expect(find.textContaining('Aucun courrier'), findsNothing);
+  });
+
+  group('a change refused by the server is reported', () {
+    Future<void> ouvrirDetail(WidgetTester tester, FauxDepot depot) async {
+      await tester.pumpWidget(appli(depot));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Payer l\'amende'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('marking as done', (tester) async {
+      await ouvrirDetail(tester, _DepotCasse([echeance()]));
+      await tester.tap(find.text('C\'est fait'));
+      await tester.pumpAndSettle();
+      expect(find.text('Modification impossible'), findsOneWidget);
+    });
+
+    testWidgets('undoing', (tester) async {
+      final depot = _DepotCasseEnSuite([echeance()]);
+      await ouvrirDetail(tester, depot);
+      await tester.tap(find.text('C\'est fait'));
+      await tester.pumpAndSettle();
+      expect(find.text('Marqué comme fait'), findsOneWidget);
+      depot.casse = true;
+      await tester.tap(find.text('Annuler'));
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(find.text('Modification impossible'), findsOneWidget);
+    });
+
+    testWidgets('deleting', (tester) async {
+      await ouvrirDetail(tester, _DepotCasse([echeance()]));
+      await tester.ensureVisible(find.text('Supprimer'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Supprimer'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Supprimer').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Modification impossible'), findsOneWidget);
+    });
+  });
+
+  test('bornerTexte never cuts an emoji in half', () {
+    expect(bornerTexte('abc', 5), 'abc');
+    expect(bornerTexte('abcdef', 3), 'abc');
+    expect(bornerTexte('ab😀cd', 3), 'ab');
+    expect(bornerTexte('ab😀cd', 4), 'ab😀');
+  });
 }
 
 /// Answers only when the test says so, like a backend waking up.
-class _LecteurLent implements LecteurCourrier {
-  final reponse = Completer<Lecture>();
+class _LecteurLent extends FauxLecteur {
+  final attendue = Completer<Lecture>();
 
   @override
-  Future<Lecture> lire(CourrierAEnvoyer courrier) => reponse.future;
+  Future<Lecture> lire(CourrierAEnvoyer courrier) => attendue.future;
 }
 
 /// Fails the way no screen expects (a token refresh, a bug): the user must still be told.
-class _LecteurEnPanne implements LecteurCourrier {
+class _LecteurEnPanne extends FauxLecteur {
   @override
   Future<Lecture> lire(CourrierAEnvoyer courrier) async => throw StateError('jeton introuvable');
+}
+
+/// Every write fails, even before returning a future.
+class _DepotCasse extends FauxDepot {
+  _DepotCasse([super.depart]);
+
+  @override
+  Future<void> ajouter(Echeance e) => throw StateError('inattendu');
+
+  @override
+  Future<void> marquerFait(String id, bool fait) => throw StateError('refusé');
+
+  @override
+  Future<void> supprimer(String id) => throw StateError('refusé');
+}
+
+class _DepotCasseEnSuite extends FauxDepot {
+  _DepotCasseEnSuite([super.depart]);
+
+  var casse = false;
+
+  @override
+  Future<void> marquerFait(String id, bool fait) async {
+    if (casse) throw StateError('refusé');
+  }
+}
+
+class _DepotCompteur extends FauxDepot {
+  var ecoutes = 0;
+
+  @override
+  Stream<List<Echeance>> surveiller() {
+    ecoutes++;
+    return super.surveiller();
+  }
+}
+
+class _DepotSansReseau extends FauxDepot {
+  final reponse = Completer<void>();
+
+  @override
+  Future<void> ajouter(Echeance e) {
+    ajoutees.add(e);
+    return reponse.future;
+  }
+}
+
+class _DepotMuet extends FauxDepot {
+  @override
+  Stream<List<Echeance>> surveiller() => const Stream.empty();
 }

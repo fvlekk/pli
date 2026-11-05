@@ -33,9 +33,19 @@ class LectureImpossible implements Exception {
 
 abstract interface class LecteurCourrier {
   Future<Lecture> lire(CourrierAEnvoyer courrier);
+
+  /// The free backend sleeps when idle: start waking it before the user sends a letter. Never fails.
+  Future<void> reveiller();
 }
 
 const tailleMaxOctets = 5 * 1024 * 1024;
+
+/// A little over the backend's usual worst case (about 60 s to wake, then 2 x 60 s on the model): never give up on a
+/// call that is still billed.
+const delaiLecture = Duration(seconds: 190);
+
+/// The tokens come from Firebase and reCAPTCHA, which can stay silent (blocked script, no network).
+const attenteJeton = Duration(seconds: 30);
 
 class LecteurHttp implements LecteurCourrier {
   LecteurHttp({
@@ -73,10 +83,10 @@ class LecteurHttp implements LecteurCourrier {
 
     final String connexion;
     try {
-      connexion = await jeton();
+      connexion = await jeton().timeout(attenteJeton);
     } catch (_) {
       // Renewing the sign-in token needs the network and, with App Check enforced, a fresh attestation.
-      throw const LectureImpossible('Ta connexion à Pli a expiré : recharge la page, puis réessaie.');
+      throw const LectureImpossible('Ta connexion à Pli a expiré : ferme et rouvre Pli, puis réessaie.');
     }
 
     final http.Response reponse;
@@ -92,7 +102,7 @@ class LecteurHttp implements LecteurCourrier {
             },
             body: jsonEncode(corps),
           )
-          .timeout(const Duration(seconds: 90));
+          .timeout(delaiLecture);
     } on TimeoutException {
       throw const LectureImpossible('La lecture prend trop de temps. Réessaie, ou saisis l\'échéance à la main.');
     } on http.ClientException catch (e) {
@@ -107,10 +117,19 @@ class LecteurHttp implements LecteurCourrier {
     throw LectureImpossible(detail is String ? detail : 'Lecture impossible (erreur ${reponse.statusCode}).');
   }
 
+  @override
+  Future<void> reveiller() async {
+    try {
+      await _client.get(urlApi.resolve('/healthz'));
+    } catch (_) {
+      // Only a head start: the reading itself reports any real failure.
+    }
+  }
+
   /// Without a token (reCAPTCHA blocked, App Check off) the request still goes: the backend decides.
   Future<String?> _jetonApp() async {
     try {
-      return await jetonApp?.call();
+      return await jetonApp?.call().timeout(attenteJeton);
     } catch (_) {
       return null;
     }

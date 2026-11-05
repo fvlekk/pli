@@ -57,7 +57,7 @@ cd app && flutter build web --release --no-wasm-dry-run --output build/web-app \
   --dart-define=PLI_FIREBASE_APP_ID=... --dart-define=PLI_FIREBASE_API_KEY=... --dart-define=PLI_FIREBASE_SENDER_ID=... \
   --dart-define=PLI_RECAPTCHA_CLE=...   # App Check (web only); empty = off
 #   values: npx firebase apps:sdkconfig WEB --project plii-ba3d8, reCAPTCHA Enterprise site key (all public, not secrets)
-#   backend: PLI_APP_CHECK=1 requires the App Check token; unset, it is only checked and logged (app_check: ...)
+#   backend: the App Check token is required unless PLI_APP_CHECK=0 (then only checked and logged, app_check: ...)
 
 # iOS (no Mac): Codemagic builds an unsigned IPA (`codemagic.yaml`, started by hand, values in its group `pli_ios`),
 # Sideloadly installs it from Windows with a free Apple ID (expires after 7 days). Its App Check debug token is for
@@ -80,12 +80,14 @@ reCAPTCHA scores headless browsers as bots, so the app stops at its start screen
 - **Users only see their own data.** Firestore path `users/{uid}/echeances/{id}`; rules check `request.auth.uid == uid`
   and the document's shape. Any rules change comes with a rules test.
 - Every backend route except `/healthz` requires a valid Firebase ID token, and is rate limited per uid and per
-  instance (anonymous accounts are free to create: the per-uid limit alone caps nothing).
+  instance (anonymous accounts are free to create: the per-uid limit alone caps nothing), per minute and per day. The
+  counters are in memory and a restart resets them: the real bound on a day's cost is the provider's spend limit.
+  The token is checked and the limits applied before the body is read; readings in progress at once are capped too.
 - Text limits are the same in `schema.py`, `firestore.rules` and the app (titre/organismeNom 120, resume 500).
   Change one, change all three, or the user cannot save.
 
 ## Never
-- Secrets in the repo (API keys go in env vars locally, Secret Manager in Cloud Run). `.env.example` only.
+- Secrets in the repo (API keys go in env vars locally, env vars on the host). `.env.example` only.
 - Real letters in `evals/dataset/`: synthetic only, fictional names and addresses.
 - Deploy, create cloud resources or call the paid API without the owner's explicit go.
 - Weaken a Firestore rule to make the app work: fix the app.

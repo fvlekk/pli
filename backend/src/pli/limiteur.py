@@ -1,15 +1,17 @@
 """Rate limits over a sliding one-minute window: per user, and for the whole instance.
 
 Why two limits: anonymous Firebase accounts are free to create, so a script can get a new uid for every
-request. The per-user limit stops one person spamming; the instance cap bounds what one Cloud Run instance can
-spend on the API (times --max-instances). In memory, so per instance. App Check comes before a public launch.
+request. The per-user limit stops one person spamming; the instance cap bounds what the instance can spend on
+the API. The daily caps slow down a leaked App Check token. In memory: a restart resets them, and Render's
+free instance restarts after 15 idle minutes, so only the provider's spend limit really bounds a day's cost.
 """
 
 import threading
 import time
-from collections import deque
+from collections import Counter, deque
 
 FENETRE = 60  # seconds
+JOUR = 86_400  # seconds
 
 
 def _purger(appels: deque[float], maintenant: float) -> None:
@@ -19,12 +21,23 @@ def _purger(appels: deque[float], maintenant: float) -> None:
 
 
 class Limiteur:
-    def __init__(self, par_minute: int, par_minute_instance: int, horloge=time.monotonic):
+    def __init__(
+        self,
+        par_minute: int,
+        par_minute_instance: int,
+        par_jour: int,
+        par_jour_instance: int,
+        horloge=time.monotonic,
+    ):
         self.par_minute = par_minute
         self.par_minute_instance = par_minute_instance
         self.horloge = horloge
         self._par_uid: dict[str, deque[float]] = {}
         self._instance: deque[float] = deque()
+        self.par_jour = par_jour
+        self.par_jour_instance = par_jour_instance
+        self._debut_jour = horloge()
+        self._jour_par_uid: Counter[str] = Counter()
         self._verrou = threading.Lock()
 
     def autoriser(self, uid: str) -> bool:
@@ -43,6 +56,20 @@ class Limiteur:
                 return False
             appels.append(maintenant)
             self._instance.append(maintenant)
+            return True
+
+    def autoriser_aujourdhui(self, uid: str) -> bool:
+        maintenant = self.horloge()
+        with self._verrou:
+            if maintenant - self._debut_jour >= JOUR:
+                self._debut_jour = maintenant
+                self._jour_par_uid.clear()
+            if (
+                self._jour_par_uid[uid] >= self.par_jour
+                or self._jour_par_uid.total() >= self.par_jour_instance
+            ):
+                return False
+            self._jour_par_uid[uid] += 1
             return True
 
     def suivis(self) -> int:

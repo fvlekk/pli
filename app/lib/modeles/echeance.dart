@@ -1,5 +1,17 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Same limits as firestore.rules and schema.py (test_schema.py checks all three). UTF-16 units.
+const longueurMaxTitre = 120;
+const longueurMaxResume = 500;
+
+/// At most [max] UTF-16 units, without cutting an emoji in half.
+String bornerTexte(String texte, int max) {
+  if (texte.length <= max) return texte;
+  final dernier = texte.codeUnitAt(max - 1);
+  final coupeUnEmoji = dernier >= 0xD800 && dernier <= 0xDBFF;
+  return texte.substring(0, coupeUnEmoji ? max - 1 : max);
+}
+
 /// A confirmed deadline, stored at users/{uid}/echeances/{id}. Field names match firestore.rules.
 class Echeance {
   const Echeance({

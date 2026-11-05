@@ -12,6 +12,9 @@ class LecteurDemo implements LecteurCourrier {
   final _lectures = {for (final e in exemples) e.texte.trim(): _parTitre[e.titre]!};
 
   @override
+  Future<void> reveiller() async {}
+
+  @override
   Future<Lecture> lire(CourrierAEnvoyer courrier) async {
     final lecture = switch (courrier) {
       CourrierTexte(:final texte) => _lectures[texte.trim()],

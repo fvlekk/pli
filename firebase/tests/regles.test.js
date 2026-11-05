@@ -127,6 +127,18 @@ describe("create", () => {
 });
 
 describe("update and delete", () => {
+  test("the limits count characters, not bytes: an accented or emoji text at the limit is accepted", async () => {
+    const db = base("alice");
+    const accents = { titre: "é".repeat(120), organismeNom: "é".repeat(120), resume: "é".repeat(500) };
+    await assertSucceeds(setDoc(chemin(db, "alice", "accents"), echeance(accents)));
+    await assertSucceeds(setDoc(chemin(db, "alice", "emojis"), echeance({ titre: "😀".repeat(60) })));
+  });
+
+  test("a deadline entered by hand is accepted, without a summary", async () => {
+    const manuelle = echeance({ source: "manuel", organismeNom: "Saisie à la main", resume: "" });
+    await assertSucceeds(setDoc(chemin(base("alice"), "alice"), manuelle));
+  });
+
   test("the owner ticks a deadline done", async () => {
     await creerPourAlice();
     await assertSucceeds(updateDoc(chemin(base("alice"), "alice"), { fait: true }));

@@ -9,7 +9,7 @@ import pytest
 from pli.courrier import Courrier
 from pli.extracteurs.claude import SYSTEME, ExtracteurClaude, ExtractionImpossible, ServiceIndisponible
 
-from .conftest import extraction
+from .conftest import config, extraction
 
 RECU_LE = date(2026, 10, 12)
 
@@ -107,6 +107,14 @@ def test_rate_limit_and_network_errors_are_retryable():
             extracteur(FauxClient(erreur=erreur)).extraire(Courrier(texte="x"), RECU_LE)
 
 
+def test_any_other_sdk_error_is_an_extraction_failure():
+    with pytest.raises(ExtractionImpossible) as e:
+        extracteur(FauxClient(erreur=anthropic.AnthropicError("texte du courrier"))).extraire(
+            Courrier(texte="x"), RECU_LE
+        )
+    assert "texte du courrier" not in str(e.value)
+
+
 def test_bad_request_is_not_retryable():
     erreur = anthropic.BadRequestError("schéma", response=httpx2.Response(400, request=_requete()), body=None)
     with pytest.raises(ExtractionImpossible):
@@ -152,3 +160,10 @@ def test_an_ordinary_letter_reaches_the_model_unchanged():
     client = FauxClient(reponse())
     extracteur(client).extraire(Courrier(texte=lettre), RECU_LE)
     assert lettre in client.requetes[0]["messages"][0]["content"][0]["text"]
+
+
+def test_one_reading_stays_within_what_the_app_waits_for(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    client = ExtracteurClaude.depuis_config(config()).client
+    assert client.max_retries == 1
+    assert client.timeout == 60

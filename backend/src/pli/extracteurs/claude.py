@@ -54,7 +54,8 @@ class ExtracteurClaude:
     @classmethod
     def depuis_config(cls, config: Config) -> "ExtracteurClaude":
         # The client reads ANTHROPIC_API_KEY from the environment; the key never goes through our code.
-        return cls(anthropic.Anthropic(max_retries=2, timeout=60), config.modele, config.effort)
+        # Usually at most 2 x 60 s: the app waits longer (`delaiLecture`), not to drop a billed call.
+        return cls(anthropic.Anthropic(max_retries=1, timeout=60), config.modele, config.effort)
 
     def _contenu(self, courrier: Courrier, recu_le: date) -> list[dict]:
         consigne = f"Courrier reçu le {recu_le.isoformat()}."
@@ -90,6 +91,10 @@ class ExtracteurClaude:
             # The SDK validates the JSON against the schema (truncated output, amount out of bounds...).
             # `from None` and no message: the error text quotes the model's output, which quotes the letter.
             raise ExtractionImpossible("sortie invalide") from None
+        except (
+            anthropic.AnthropicError
+        ) as e:  # the SDK's other errors: never a traceback with the model's output
+            raise ExtractionImpossible(type(e).__name__) from None
 
         if reponse.stop_reason != "end_turn" or reponse.parsed_output is None:
             raise ExtractionImpossible(f"stop_reason={reponse.stop_reason}")

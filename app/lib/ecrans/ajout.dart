@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../config.dart';
 import '../exemples.dart';
 import '../modeles/echeance.dart';
+import '../modeles/lecture.dart';
 import '../outils/image_stub.dart' if (dart.library.js_interop) '../outils/image_web.dart';
 import '../outils/selection_stub.dart' if (dart.library.js_interop) '../outils/selection_web.dart';
 import '../services/depot_echeances.dart';
@@ -52,6 +53,12 @@ class _EcranAjoutState extends State<EcranAjout> {
   String? _erreur;
 
   @override
+  void initState() {
+    super.initState();
+    unawaited(widget.lecteur.reveiller());
+  }
+
+  @override
   void dispose() {
     _minuteurLent?.cancel();
     _texte.dispose();
@@ -71,13 +78,7 @@ class _EcranAjoutState extends State<EcranAjout> {
     });
     try {
       final lecture = await widget.lecteur.lire(courrier).whenComplete(() => _minuteurLent?.cancel());
-      if (!mounted) return;
-      final enregistree = await Navigator.of(context).push<Echeance>(
-        MaterialPageRoute(
-          builder: (_) => EcranVerification(lecture: lecture, depot: widget.depot, maintenant: widget.maintenant),
-        ),
-      );
-      if (enregistree != null && mounted) Navigator.of(context).pop(enregistree);
+      if (mounted) await _verifier(lecture);
     } on LectureImpossible catch (e) {
       if (mounted) _signaler(e.message);
     } catch (_) {
@@ -92,6 +93,15 @@ class _EcranAjoutState extends State<EcranAjout> {
         });
       }
     }
+  }
+
+  Future<void> _verifier(Lecture lecture) async {
+    final enregistree = await Navigator.of(context).push<Echeance>(
+      MaterialPageRoute(
+        builder: (_) => EcranVerification(lecture: lecture, depot: widget.depot, maintenant: widget.maintenant),
+      ),
+    );
+    if (enregistree != null && mounted) Navigator.of(context).pop(enregistree);
   }
 
   /// The message sits at the top: scroll up to it, the user may have tapped an example at the bottom.
@@ -140,6 +150,16 @@ class _EcranAjoutState extends State<EcranAjout> {
     return photo == null ? null : CourrierFichier(mediaType: 'image/jpeg', octets: await photo.readAsBytes());
   });
 
+  String get _consigne {
+    if (_enCours) return _lent ? 'Le service se réveille, ça peut prendre une minute…' : 'Je lis ton courrier…';
+    if (Config.demo) {
+      return 'Pli lit le courrier et te propose l\'échéance. Pli n\'enregistre pas le courrier : '
+          'seule l\'échéance que tu valides est gardée.';
+    }
+    return 'Pli envoie le courrier à Claude (Anthropic) pour le lire et ne le garde pas : '
+        'seule l\'échéance que tu valides est enregistrée.';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -155,13 +175,7 @@ class _EcranAjoutState extends State<EcranAjout> {
                   controller: _defilement,
                   padding: const EdgeInsets.fromLTRB(Espaces.l, Espaces.s, Espaces.l, Espaces.l),
                   children: [
-                    Text(
-                      _enCours
-                          ? (_lent ? 'Le service se réveille, ça peut prendre une minute…' : 'Je lis ton courrier…')
-                          : 'Pli lit le courrier et te propose l\'échéance. Pli n\'enregistre pas le courrier : '
-                                'seule l\'échéance que tu valides est gardée.',
-                      style: Textes.corps.copyWith(color: Couleurs.encreDouce),
-                    ),
+                    Text(_consigne, style: Textes.corps.copyWith(color: Couleurs.encreDouce)),
                     if (_erreur != null) ...[const SizedBox(height: Espaces.m), _Alerte(texte: _erreur!)],
                     const SizedBox(height: Espaces.l),
                     Column(
@@ -219,6 +233,12 @@ class _EcranAjoutState extends State<EcranAjout> {
                           ],
                         ),
                       ],
+                    ),
+                    _Choix(
+                      emoji: '✏️',
+                      titre: 'Saisir à la main',
+                      detail: 'Si la lecture ne marche pas',
+                      onTap: () => _verifier(Lecture.manuelle()),
                     ),
                     const SizedBox(height: Espaces.l),
                     const Text('Pas de courrier sous la main ?', style: Textes.section),

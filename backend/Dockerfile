@@ -1,4 +1,4 @@
-# Cloud Run image: dependencies from the lockfile, no dev tools, non-root user.
+# Backend image (Render today): dependencies from the lockfile, no dev tools, non-root user.
 FROM ghcr.io/astral-sh/uv:0.12.19-python3.12-trixie-slim AS build
 WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
