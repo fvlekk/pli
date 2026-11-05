@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
@@ -9,6 +11,9 @@ import '../services/depot_echeances.dart';
 import '../theme.dart';
 import '../widgets/carte_echeance.dart';
 import '../widgets/notification.dart';
+
+/// Firestore only answers once the server has the write: without network it would never answer.
+const attenteEnregistrement = Duration(seconds: 15);
 
 /// The user checks what was read before anything is saved. This screen is the verification step.
 class EcranVerification extends StatefulWidget {
@@ -35,6 +40,7 @@ class _EcranVerificationState extends State<EcranVerification> {
   String? _erreurMontant;
 
   Lecture get _l => widget.lecture;
+  bool get _manuelle => _l.source == 'manuel';
 
   @override
   void dispose() {
@@ -69,8 +75,10 @@ class _EcranVerificationState extends State<EcranVerification> {
   double? _lireMontant() {
     final brut = _montant.text.replaceAll(RegExp(r'[\s€]'), '').replaceAll(',', '.');
     if (brut.isEmpty) return null;
-    final valeur = double.tryParse(brut);
-    return valeur != null && valeur >= 0 && valeur < 1000000 ? valeur : double.nan;
+    // « 1.234 » means 1 234 € to a French reader, not 1,23 €: refuse what is not plainly an amount.
+    if (!RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(brut)) return double.nan;
+    final valeur = double.parse(brut);
+    return valeur < 1000000 ? valeur : double.nan;
   }
 
   Future<void> _enregistrer() async {
@@ -85,24 +93,32 @@ class _EcranVerificationState extends State<EcranVerification> {
     });
     final echeance = Echeance(
       organisme: _l.organisme,
-      organismeNom: _borne(_l.organismeNom, 120),
+      organismeNom: bornerTexte(_l.organismeNom, longueurMaxTitre),
       action: _l.action,
-      titre: _borne(_titre.text.trim(), 120),
+      titre: bornerTexte(_titre.text.trim(), longueurMaxTitre),
       dateLimite: _date!,
       montant: montant,
-      resume: _borne(_l.resume, 500),
+      resume: bornerTexte(_l.resume, longueurMaxResume),
       // A date or an amount the user set themselves is verified by definition.
       aVerifier: _l.aVerifier && !_corrige && montant == _l.montant,
       fait: false,
-      source: _l.source == 'claude' ? 'claude' : 'regle',
+      source: _manuelle ? 'manuel' : (_l.source == 'claude' ? 'claude' : 'regle'),
     );
+    final ecriture = Future<void>.sync(() => widget.depot.ajouter(echeance));
     try {
-      await widget.depot.ajouter(echeance);
+      await ecriture.timeout(attenteEnregistrement);
       if (mounted) Navigator.of(context).pop(echeance);
-    } on FirebaseException catch (e) {
+    } on TimeoutException {
+      // The write stays in Firestore's queue and leaves when the network returns: saving again would duplicate it.
+      if (!mounted) return;
+      _annoncerLaSuite(ecriture, echeance);
+      await _expliquerLAttente();
+      // Straight back to the list, without the result that would announce a success.
+      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+    } catch (e) {
       if (!mounted) return;
       setState(() => _enregistrement = false);
-      final message = e.code == 'permission-denied'
+      final message = e is FirebaseException && e.code == 'permission-denied'
           ? 'Cette échéance n\'a pas pu être enregistrée : un champ n\'est pas valide. Corrige-le et réessaie.'
           : 'Enregistrement impossible. Vérifie ta connexion et réessaie.';
       notifier(
@@ -114,36 +130,64 @@ class _EcranVerificationState extends State<EcranVerification> {
     }
   }
 
-  /// Same limits as firestore.rules.
-  static String _borne(String texte, int max) => texte.length <= max ? texte : texte.substring(0, max);
+  /// On the web the queue dies with the page, so only the server's answer may read as saved.
+  void _annoncerLaSuite(Future<void> ecriture, Echeance echeance) {
+    final messager = ScaffoldMessenger.of(context);
+    unawaited(
+      ecriture.then<void>(
+        (_) => notifier(messager, 'Échéance enregistrée', detail: echeance.titre),
+        onError: (Object _) => notifier(
+          messager,
+          'Échéance non enregistrée',
+          detail: '${echeance.titre} : ajoute-la de nouveau.',
+          ton: TonNotification.alerte,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _expliquerLAttente() => showDialog<void>(
+    context: context,
+    builder: (dialogue) => AlertDialog(
+      title: const Text('Pas encore enregistrée'),
+      content: const Text(
+        'Le réseau ne répond pas. Laisse Pli ouvert : ton échéance partira dès qu\'il revient. '
+        'Si tu le fermes, vérifie en revenant qu\'elle est bien dans ta liste.',
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(dialogue), child: const Text('OK'))],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     final jours = _date == null ? null : joursRestants(_date!, widget.maintenant());
     final peutEnregistrer = _date != null && _titre.text.trim().isNotEmpty && !_enregistrement;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Vérifie avant d\'enregistrer')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(Espaces.m),
-          children: [
-            _EnTete(lecture: _l, date: _date, jours: jours),
-            const SizedBox(height: Espaces.l),
-            if (_l.aVerifier) ...[_AVerifier(raison: _l.raisonVerification), const SizedBox(height: Espaces.m)],
-            if (!_rappelQuandMeme) ..._rienAFaire() else ..._formulaire(),
-          ],
+    // Leaving during a save would drop the write's outcome, and saving again would duplicate it.
+    return PopScope(
+      canPop: !_enregistrement,
+      child: Scaffold(
+        appBar: AppBar(title: Text(_manuelle ? 'Nouvelle échéance' : 'Vérifie avant d\'enregistrer')),
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(Espaces.m),
+            children: [
+              if (!_manuelle) ...[_EnTete(lecture: _l, date: _date, jours: jours), const SizedBox(height: Espaces.l)],
+              if (_l.aVerifier) ...[_AVerifier(raison: _l.raisonVerification), const SizedBox(height: Espaces.m)],
+              if (!_rappelQuandMeme) ..._rienAFaire() else ..._formulaire(),
+            ],
+          ),
         ),
+        bottomNavigationBar: _rappelQuandMeme
+            ? SafeArea(
+                minimum: const EdgeInsets.fromLTRB(Espaces.m, Espaces.s, Espaces.m, Espaces.m),
+                child: FilledButton(
+                  onPressed: peutEnregistrer ? _enregistrer : null,
+                  child: Text(_date == null ? 'Choisis une date pour enregistrer' : 'Enregistrer l\'échéance'),
+                ),
+              )
+            : null,
       ),
-      bottomNavigationBar: _rappelQuandMeme
-          ? SafeArea(
-              minimum: const EdgeInsets.fromLTRB(Espaces.m, Espaces.s, Espaces.m, Espaces.m),
-              child: FilledButton(
-                onPressed: peutEnregistrer ? _enregistrer : null,
-                child: Text(_date == null ? 'Choisis une date pour enregistrer' : 'Enregistrer l\'échéance'),
-              ),
-            )
-          : null,
     );
   }
 
@@ -152,7 +196,7 @@ class _EcranVerificationState extends State<EcranVerification> {
     const SizedBox(height: Espaces.s),
     Text(_l.resume, style: Textes.corps),
     const SizedBox(height: Espaces.l),
-    FilledButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Compris')),
+    FilledButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Compris')),
     const SizedBox(height: Espaces.s),
     OutlinedButton(
       onPressed: () => setState(() => _rappelQuandMeme = true),
@@ -163,15 +207,17 @@ class _EcranVerificationState extends State<EcranVerification> {
   List<Widget> _formulaire() => [
     TextField(
       controller: _titre,
-      maxLength: 120,
+      maxLength: longueurMaxTitre,
       style: Textes.ligne,
       decoration: const InputDecoration(labelText: 'Ce qu\'il faut faire', counterText: ''),
       onChanged: (_) => setState(() {}),
     ),
     const SizedBox(height: Espaces.s),
-    Text('De la part de', style: Textes.discret),
-    Text(_l.organismeNom, style: Textes.corps),
-    const SizedBox(height: Espaces.m),
+    if (!_manuelle) ...[
+      Text('De la part de', style: Textes.discret),
+      Text(_l.organismeNom, style: Textes.corps),
+      const SizedBox(height: Espaces.m),
+    ],
     InkWell(
       onTap: _choisirDate,
       borderRadius: BorderRadius.circular(6),
@@ -186,13 +232,15 @@ class _EcranVerificationState extends State<EcranVerification> {
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       decoration: InputDecoration(labelText: 'Montant (facultatif)', suffixText: '€', errorText: _erreurMontant),
     ),
-    const SizedBox(height: Espaces.m),
-    Text(_l.resume, style: Textes.corps.copyWith(color: Couleurs.encreDouce)),
-    const SizedBox(height: Espaces.m),
-    Text(
-      _l.source == 'claude' ? 'Lu par Claude. Vérifie la date et le montant.' : 'Lu par la règle simple, sans IA.',
-      style: Textes.discret,
-    ),
+    if (!_manuelle) ...[
+      const SizedBox(height: Espaces.m),
+      Text(_l.resume, style: Textes.corps.copyWith(color: Couleurs.encreDouce)),
+      const SizedBox(height: Espaces.m),
+      Text(
+        _l.source == 'claude' ? 'Lu par Claude. Vérifie la date et le montant.' : 'Lu par la règle simple, sans IA.',
+        style: Textes.discret,
+      ),
+    ],
   ];
 }
 

@@ -26,6 +26,21 @@ class Lecture {
   final String source;
   final String? modele;
 
+  /// Nothing was read: the user enters the deadline themselves, when the reading fails or there is no letter.
+  factory Lecture.manuelle() => const Lecture(
+    organisme: 'autre',
+    organismeNom: 'Saisie à la main',
+    action: 'demander',
+    titre: '',
+    dateLimite: null,
+    montant: null,
+    resume: '',
+    aVerifier: false,
+    raisonVerification: null,
+    source: 'manuel',
+    modele: null,
+  );
+
   bool get aUneEcheance => action != 'aucune' && dateLimite != null;
 
   factory Lecture.depuisJson(Map<String, dynamic> json) {

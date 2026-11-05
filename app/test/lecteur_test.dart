@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:pli/modeles/lecture.dart';
 import 'package:pli/services/lecteur_courrier.dart';
 
 const reponseOk = {
@@ -146,8 +148,61 @@ void main() {
     );
     await expectLater(
       () => l.lire(const CourrierTexte('x')),
-      throwsA(isA<LectureImpossible>().having((e) => e.message, 'message', contains('recharge la page'))),
+      throwsA(isA<LectureImpossible>().having((e) => e.message, 'message', contains('rouvre Pli'))),
     );
     expect(appels, 0);
+  });
+
+  test('reveiller calls /healthz and never fails', () async {
+    final chemins = <String>[];
+    await lecteur(
+      MockClient((r) async {
+        chemins.add(r.url.path);
+        throw http.ClientException('hors ligne');
+      }),
+    ).reveiller();
+    expect(chemins, ['/healthz']);
+  });
+
+  testWidgets('a sign-in token that never comes ends in a message', (tester) async {
+    Object? erreur;
+    final l = LecteurHttp(
+      urlApi: Uri.parse('https://api.pli.test'),
+      jeton: () => Completer<String>().future,
+      client: MockClient((_) async => json(reponseOk, 200)),
+    );
+    unawaited(
+      l
+          .lire(const CourrierTexte('x'))
+          .catchError((Object e) {
+            erreur = e;
+            return Future<Lecture>.error(e);
+          })
+          .then((_) {}, onError: (Object _) {}),
+    );
+    await tester.pump(attenteJeton + const Duration(seconds: 1));
+    expect(erreur, isA<LectureImpossible>());
+  });
+
+  testWidgets('an App Check token that never comes still lets the backend decide', (tester) async {
+    http.Request? recue;
+    final l = LecteurHttp(
+      urlApi: Uri.parse('https://api.pli.test'),
+      jeton: () async => 'jeton-1',
+      jetonApp: () => Completer<String?>().future,
+      client: MockClient((r) async {
+        recue = r;
+        return json(reponseOk, 200);
+      }),
+    );
+    unawaited(l.lire(const CourrierTexte('x')).then((_) {}));
+    await tester.pump(attenteJeton + const Duration(seconds: 1));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    expect(recue, isNotNull);
+    expect(recue!.headers.containsKey('X-Firebase-AppCheck'), isFalse);
+  });
+
+  test('the app waits longer than the backend worst case', () {
+    expect(delaiLecture, greaterThan(const Duration(seconds: 60 + 2 * 60)));
   });
 }

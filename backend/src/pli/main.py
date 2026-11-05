@@ -1,22 +1,26 @@
 """HTTP API. Run with: uv run uvicorn --factory pli.main:creer_app_depuis_env --port 8080"""
 
+import asyncio
 import base64
 import binascii
+import gc
 import os
+import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
+from starlette.requests import ClientDisconnect
 
 from pli.auth import AuthIndisponible, JetonInvalide, VerificateurFirebase, VerificateurJeton
 from pli.config import Config
-from pli.courrier import Courrier, FormatNonLisible, nombre_de_pages
+from pli.courrier import Courrier, FormatNonLisible, nombre_de_pages, type_image
 from pli.extracteurs.base import Extracteur
 from pli.extracteurs.claude import ExtracteurClaude, ExtractionImpossible, ServiceIndisponible
 from pli.extracteurs.regle import ExtracteurRegle
@@ -25,6 +29,7 @@ from pli.limiteur import Limiteur
 from pli.schema import Extraction
 
 PARIS = ZoneInfo("Europe/Paris")
+ATTENTE_CORPS = 120  # seconds: a client that stops sending must not keep its reading place
 
 
 class Fichier(BaseModel):
@@ -71,8 +76,14 @@ def creer_app(
     aujourdhui: Callable[[], date] = aujourdhui_paris,
 ) -> FastAPI:
     app = FastAPI(title="Pli", docs_url=None, redoc_url=None, openapi_url=None)
-    limiteur = Limiteur(config.requetes_par_minute, config.requetes_par_minute_instance)
+    limiteur = Limiteur(
+        config.requetes_par_minute,
+        config.requetes_par_minute_instance,
+        config.requetes_par_jour,
+        config.requetes_par_jour_instance,
+    )
     taille_max_requete = config.taille_max_octets * 4 // 3 + 4096  # base64 + JSON envelope
+    places = threading.BoundedSemaphore(config.lectures_simultanees)
 
     @app.middleware("http")
     async def entetes_et_taille(request: Request, call_next):
@@ -116,7 +127,7 @@ def creer_app(
                 raise HTTPException(
                     503, "Vérification impossible pour le moment, réessaie", {"Retry-After": "30"}
                 )
-            raise HTTPException(401, "Application non reconnue : recharge la page")
+            raise HTTPException(401, "Application non reconnue : ferme et rouvre Pli, puis réessaie")
         return statut
 
     def utilisateur(request: Request) -> str:
@@ -138,13 +149,40 @@ def creer_app(
             )
         return uid
 
+    def place_de_lecture(uid: str = Depends(utilisateur)) -> Iterator[None]:
+        """Limits per minute do not bound what is in memory at once: a reading can last two minutes."""
+        if not places.acquire(blocking=False):
+            raise HTTPException(503, "Le service de lecture est occupé, réessaie", {"Retry-After": "30"})
+        try:
+            yield
+        finally:
+            # A failed call leaves the letter in reference cycles: left to the next full collection, a few
+            # junk images were enough to pass 512 MB.
+            gc.collect()
+            places.release()
+
+    async def demande_lue(request: Request, _place: None = Depends(place_de_lecture)) -> DemandeExtraction:
+        """The body, read only once the caller is known and within its limit: at up to 7 MB a request, scripts
+        without a token could otherwise fill a small instance's memory. A refusal never echoes the letter."""
+        try:
+            async with asyncio.timeout(ATTENTE_CORPS):
+                return DemandeExtraction.model_validate_json(await request.body())
+        except TimeoutError:
+            raise HTTPException(408, "Envoi trop lent : vérifie ta connexion et réessaie") from None
+        except ClientDisconnect:
+            raise HTTPException(400, "Envoi interrompu") from None
+        except ValidationError:
+            raise HTTPException(422, "Ce courrier n'est pas lisible : vérifie ce que tu as envoyé") from None
+
     @app.get("/healthz")
     def sante() -> dict:
         return {"ok": True, "extracteur": extracteur.nom}
 
     @app.post("/v1/extractions")
     def extraire(
-        demande: DemandeExtraction, request: Request, uid: str = Depends(utilisateur)
+        request: Request,
+        demande: Annotated[DemandeExtraction, Depends(demande_lue)],
+        uid: str = Depends(utilisateur),
     ) -> ReponseExtraction:
         if demande.fichier:
             try:
@@ -153,7 +191,8 @@ def creer_app(
                 raise HTTPException(422, "Fichier mal encodé") from None
             if len(contenu) > config.taille_max_octets:
                 raise HTTPException(413, "Fichier trop lourd (5 Mo maximum)")
-            if demande.fichier.media_type == "application/pdf":
+            media_type = demande.fichier.media_type
+            if media_type == "application/pdf":
                 try:
                     pages = nombre_de_pages(contenu)
                 except FormatNonLisible as e:
@@ -163,9 +202,19 @@ def creer_app(
                         422,
                         f"PDF trop long ({config.pages_max} pages maximum) : garde les pages utiles",
                     )
-            courrier = Courrier(media_type=demande.fichier.media_type, contenu=contenu)
+            else:
+                media_type = type_image(contenu)
+                if media_type is None:
+                    raise HTTPException(
+                        422, "Cette image n'est pas lisible : envoie un PNG, un JPEG ou un WebP"
+                    )
+            courrier = Courrier(media_type=media_type, contenu=contenu)
         else:
             courrier = Courrier(texte=demande.texte)
+
+        # Charged here: a request refused above never reaches the model, so it costs no quota.
+        if not limiteur.autoriser_aujourdhui(uid):
+            raise HTTPException(429, "Limite du jour atteinte, réessaie demain", {"Retry-After": "3600"})
 
         debut = time.perf_counter()
         trace = {
@@ -206,9 +255,15 @@ def creer_app(
 def creer_app_depuis_env() -> FastAPI:
     config = Config.depuis_env()
     emulateur = bool(os.environ.get("FIREBASE_AUTH_EMULATOR_HOST"))
-    if emulateur and (not config.auth_emulateur or os.environ.get("K_SERVICE")):
+    if emulateur and (not config.auth_emulateur or os.environ.get("K_SERVICE") or os.environ.get("RENDER")):
         # The emulator makes firebase-admin accept unsigned tokens: refuse rather than run wide open.
         raise RuntimeError("FIREBASE_AUTH_EMULATOR_HOST est défini hors du mode émulateur local")
+    if not emulateur:
+        # Both are normal locally. On a host, a lost variable must not degrade in silence.
+        if not config.app_check_obligatoire:
+            journaliser("App Check n'est pas obligatoire (PLI_APP_CHECK)", "WARNING")
+        if config.extracteur != "claude":
+            journaliser("extracteur de secours sans Claude (ANTHROPIC_API_KEY)", "WARNING")
     extracteur = (
         ExtracteurClaude.depuis_config(config) if config.extracteur == "claude" else ExtracteurRegle()
     )

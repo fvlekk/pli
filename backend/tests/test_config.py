@@ -28,15 +28,55 @@ def test_refuses_the_auth_emulator_on_cloud_run(monkeypatch):
         creer_app_depuis_env()
 
 
-def test_app_check_is_only_required_when_asked(monkeypatch):
-    monkeypatch.delenv("PLI_APP_CHECK", raising=False)
-    assert Config.depuis_env().app_check_obligatoire is False
-    monkeypatch.setenv("PLI_APP_CHECK", "1")
-    assert Config.depuis_env().app_check_obligatoire is True
-
-
 def test_pdf_page_limit_defaults_to_ten(monkeypatch):
     monkeypatch.delenv("PLI_PAGES_MAX", raising=False)
     assert Config.depuis_env().pages_max == 10
     monkeypatch.setenv("PLI_PAGES_MAX", "4")
     assert Config.depuis_env().pages_max == 4
+
+
+def test_refuses_the_auth_emulator_on_render(monkeypatch):
+    monkeypatch.setenv("FIREBASE_AUTH_EMULATOR_HOST", "127.0.0.1:9099")
+    monkeypatch.setenv("PLI_AUTH_EMULATEUR", "1")
+    monkeypatch.delenv("K_SERVICE", raising=False)
+    monkeypatch.setenv("RENDER", "true")
+    with pytest.raises(RuntimeError):
+        creer_app_depuis_env()
+
+
+def test_daily_limits_have_defaults(monkeypatch):
+    monkeypatch.delenv("PLI_REQUETES_PAR_JOUR", raising=False)
+    monkeypatch.delenv("PLI_REQUETES_PAR_JOUR_INSTANCE", raising=False)
+    assert Config.depuis_env().requetes_par_jour == 30
+    assert Config.depuis_env().requetes_par_jour_instance == 500
+
+
+def test_app_check_is_required_unless_told_otherwise(monkeypatch):
+    monkeypatch.delenv("PLI_APP_CHECK", raising=False)
+    monkeypatch.delenv("PLI_AUTH_EMULATEUR", raising=False)
+    assert Config.depuis_env().app_check_obligatoire is True
+    monkeypatch.setenv("PLI_AUTH_EMULATEUR", "1")
+    assert Config.depuis_env().app_check_obligatoire is False
+    monkeypatch.setenv("PLI_APP_CHECK", "1")
+    assert Config.depuis_env().app_check_obligatoire is True
+    monkeypatch.delenv("PLI_AUTH_EMULATEUR")
+    monkeypatch.setenv("PLI_APP_CHECK", "0")
+    assert Config.depuis_env().app_check_obligatoire is False
+
+
+def test_degraded_production_settings_are_logged_at_startup(monkeypatch, capsys):
+    for nom in (
+        "FIREBASE_AUTH_EMULATOR_HOST",
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "PLI_AUTH_EMULATEUR",
+    ):
+        monkeypatch.delenv(nom, raising=False)
+    monkeypatch.delenv("PLI_EXTRACTEUR", raising=False)
+    monkeypatch.setenv("PLI_APP_CHECK", "0")
+    monkeypatch.setenv("PLI_PROJET_FIREBASE", "demo-pli")
+    creer_app_depuis_env()
+    journal = capsys.readouterr().out
+    assert "App Check" in journal
+    assert "extracteur" in journal
+    assert journal.count('"WARNING"') == 2

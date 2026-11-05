@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../modeles/echeance.dart';
@@ -12,7 +14,7 @@ import '../widgets/carte_echeance.dart';
 import '../widgets/notification.dart';
 import 'ajout.dart';
 
-class EcranAccueil extends StatelessWidget {
+class EcranAccueil extends StatefulWidget {
   const EcranAccueil({
     super.key,
     required this.depot,
@@ -28,10 +30,39 @@ class EcranAccueil extends StatelessWidget {
   final Compte? compte;
   final VoidCallback? onCompteChange;
 
+  @override
+  State<EcranAccueil> createState() => _EcranAccueilState();
+}
+
+class _EcranAccueilState extends State<EcranAccueil> {
+  late Stream<List<Echeance>> _echeances;
+  late final AppLifecycleListener _retour;
+
+  @override
+  void initState() {
+    super.initState();
+    _echeances = widget.depot.surveiller();
+    // A phone keeps the app alive for days: back in front, « Demain » must not still be yesterday's count.
+    _retour = AppLifecycleListener(onResume: () => setState(() {}));
+  }
+
+  @override
+  void didUpdateWidget(EcranAccueil ancien) {
+    super.didUpdateWidget(ancien);
+    // Another account's list was opened: the app restarts with a new depot, on this same screen.
+    if (widget.depot != ancien.depot) _echeances = widget.depot.surveiller();
+  }
+
+  @override
+  void dispose() {
+    _retour.dispose();
+    super.dispose();
+  }
+
   Future<void> _ajouter(BuildContext context) async {
     final enregistree = await Navigator.of(context).push<Echeance>(
       MaterialPageRoute(
-        builder: (_) => EcranAjout(depot: depot, lecteur: lecteur, maintenant: maintenant),
+        builder: (_) => EcranAjout(depot: widget.depot, lecteur: widget.lecteur, maintenant: widget.maintenant),
       ),
     );
     if (enregistree != null && context.mounted) {
@@ -50,20 +81,21 @@ class EcranAccueil extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         child: StreamBuilder<List<Echeance>>(
-          stream: depot.surveiller(),
+          // Its own state per account: the previous list must not stand in for one that has not answered yet.
+          key: ObjectKey(widget.depot),
+          stream: _echeances,
           builder: (context, instantane) {
             if (instantane.hasError) {
-              return _Message(
-                texte: 'Impossible de charger tes échéances. Vérifie ta connexion, elles reviendront toutes seules.',
-              );
+              // Firestore ends a listener on error (no network only delays it): nothing comes back by itself.
+              return _Message(texte: 'Impossible de charger tes échéances. Ferme et rouvre Pli pour réessayer.');
             }
-            if (!instantane.hasData) return const Center(child: CircularProgressIndicator());
+            if (!instantane.hasData) return const _Chargement();
             return _Contenu(
               echeances: instantane.data!,
-              aujourdhui: maintenant(),
-              depot: depot,
-              compte: compte,
-              onCompteChange: onCompteChange,
+              aujourdhui: widget.maintenant(),
+              depot: widget.depot,
+              compte: widget.compte,
+              onCompteChange: widget.onCompteChange,
             );
           },
         ),
@@ -78,6 +110,22 @@ class EcranAccueil extends StatelessWidget {
       ),
     );
   }
+}
+
+class _Chargement extends StatelessWidget {
+  const _Chargement();
+
+  @override
+  Widget build(BuildContext context) => const Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CircularProgressIndicator(),
+        SizedBox(height: Espaces.m),
+        Text('Chargement… Vérifie ta connexion si ça dure.', style: Textes.discret, textAlign: TextAlign.center),
+      ],
+    ),
+  );
 }
 
 class _Contenu extends StatelessWidget {
@@ -183,14 +231,34 @@ class _Detail extends StatelessWidget {
   Future<void> _marquer(BuildContext context, bool fait) async {
     final messager = ScaffoldMessenger.of(context);
     Navigator.of(context).pop();
-    await depot.marquerFait(echeance.id!, fait);
-    notifier(
-      messager,
-      fait ? 'Marqué comme fait' : 'Remis à faire',
-      detail: echeance.titre,
-      action: SnackBarAction(label: 'Annuler', onPressed: () => depot.marquerFait(echeance.id!, !fait)),
-    );
+    try {
+      await depot.marquerFait(echeance.id!, fait);
+      notifier(
+        messager,
+        fait ? 'Marqué comme fait' : 'Remis à faire',
+        detail: echeance.titre,
+        action: SnackBarAction(label: 'Annuler', onPressed: () => unawaited(_marquerSansAnnonce(messager, !fait))),
+      );
+    } catch (_) {
+      _signalerEchec(messager);
+    }
   }
+
+  Future<void> _marquerSansAnnonce(ScaffoldMessengerState messager, bool fait) async {
+    try {
+      await depot.marquerFait(echeance.id!, fait);
+    } catch (_) {
+      _signalerEchec(messager);
+    }
+  }
+
+  /// Firestore shows a change at once and takes it back if the server refuses: the user must know why.
+  void _signalerEchec(ScaffoldMessengerState messager) => notifier(
+    messager,
+    'Modification impossible',
+    detail: 'Elle n\'a pas été enregistrée. Vérifie ta connexion et réessaie.',
+    ton: TonNotification.alerte,
+  );
 
   Future<void> _supprimer(BuildContext context) async {
     final confirme = await showDialog<bool>(
@@ -205,8 +273,13 @@ class _Detail extends StatelessWidget {
       ),
     );
     if (confirme == true && context.mounted) {
+      final messager = ScaffoldMessenger.of(context);
       Navigator.of(context).pop();
-      await depot.supprimer(echeance.id!);
+      try {
+        await depot.supprimer(echeance.id!);
+      } catch (_) {
+        _signalerEchec(messager);
+      }
     }
   }
 
@@ -225,12 +298,14 @@ class _Detail extends StatelessWidget {
             const SizedBox(height: Espaces.s),
             Text(echeance.titre, style: Textes.section),
             const SizedBox(height: Espaces.xs),
-            Text(echeance.organismeNom, style: Textes.discret),
+            if (echeance.source != 'manuel') Text(echeance.organismeNom, style: Textes.discret),
             const SizedBox(height: Espaces.m),
             Text('Avant le ${dateLongue(echeance.dateLimite)}', style: Textes.corps),
             if (echeance.montant != null) Text('Montant : ${euros(echeance.montant!)}', style: Textes.corps),
-            const SizedBox(height: Espaces.s),
-            Text(echeance.resume, style: Textes.corps.copyWith(color: Couleurs.encreDouce)),
+            if (echeance.resume.isNotEmpty) ...[
+              const SizedBox(height: Espaces.s),
+              Text(echeance.resume, style: Textes.corps.copyWith(color: Couleurs.encreDouce)),
+            ],
             const SizedBox(height: Espaces.l),
             FilledButton(
               onPressed: () => _marquer(context, !echeance.fait),
@@ -360,7 +435,7 @@ class _CarteCompteState extends State<_CarteCompte> {
                 Text(
                   widget.listeVide
                       ? 'Si tu les as gardées sur un autre téléphone.'
-                      : 'Pour les retrouver sur un autre téléphone.',
+                      : 'Sans compte, elles sont liées à cet appareil et peuvent disparaître.',
                   style: Textes.discret,
                 ),
               ],

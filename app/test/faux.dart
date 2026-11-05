@@ -85,6 +85,10 @@ class FauxLecteur implements LecteurCourrier {
   final Lecture? reponse;
   final LectureImpossible? erreur;
   final recus = <CourrierAEnvoyer>[];
+  var reveils = 0;
+
+  @override
+  Future<void> reveiller() async => reveils++;
 
   @override
   Future<Lecture> lire(CourrierAEnvoyer courrier) async {

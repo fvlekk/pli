@@ -1,6 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 
-/// Build-time settings, passed with --dart-define. Nothing secret lives here: a Firebase web API key is a
+/// Build-time settings, passed with --dart-define. Nothing secret in the source: a Firebase web API key is a
 /// public identifier, access is enforced by firestore.rules and by the backend's token check.
 abstract final class Config {
   static const emulateurs = bool.fromEnvironment('PLI_EMULATEURS');
@@ -11,6 +11,10 @@ abstract final class Config {
   /// Public reCAPTCHA Enterprise site key (score) for App Check on the web. Empty: App Check off (local runs,
   /// emulators).
   static const cleRecaptcha = String.fromEnvironment('PLI_RECAPTCHA_CLE');
+
+  /// App Check debug token for a personal iOS test build: free Apple accounts cannot use App Attest. It lets its
+  /// holder pass App Check, so it stays in the build service's secrets, and it is revoked after the test. Empty: off.
+  static const jetonDebugAppCheck = String.fromEnvironment('PLI_APP_CHECK_JETON_DEBUG');
 
   /// 127.0.0.1 for web and iOS simulator, 10.0.2.2 for the Android emulator.
   static const hoteEmulateurs = String.fromEnvironment('PLI_HOTE_EMULATEURS', defaultValue: '127.0.0.1');

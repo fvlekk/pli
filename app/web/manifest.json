@@ -1,11 +1,11 @@
 {
-    "name": "pli",
-    "short_name": "pli",
+    "name": "Pli",
+    "short_name": "Pli",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFFFFF",
+    "theme_color": "#FF5151",
+    "description": "Pli lit tes courriers administratifs et te rappelle leurs échéances.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

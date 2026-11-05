@@ -66,7 +66,10 @@ class Session implements Compte {
       return ResultatGoogle.relie;
     } on FirebaseAuthException catch (e) {
       return switch (e.code) {
-        'popup-closed-by-user' || 'cancelled-popup-request' || 'web-context-canceled' => ResultatGoogle.annule,
+        'popup-closed-by-user' ||
+        'cancelled-popup-request' ||
+        'web-context-canceled' ||
+        'web-context-cancelled' => ResultatGoogle.annule,
         // Both lists hold deadlines: never merge or drop one silently.
         'credential-already-in-use' || 'email-already-in-use' => throw const CompteImpossible(
           'Ce compte Google a déjà sa propre liste. Pli ne fusionne pas encore deux listes : '

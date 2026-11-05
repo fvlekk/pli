@@ -11,6 +11,7 @@ import 'config.dart';
 import 'demo/depot_memoire.dart';
 import 'demo/lecteur_demo.dart';
 import 'ecrans/demarrage.dart';
+import 'outils/client_http_stub.dart' if (dart.library.io) 'outils/client_http_natif.dart';
 import 'services/depot_echeances.dart';
 import 'services/lecteur_courrier.dart';
 import 'services/session.dart';
@@ -26,8 +27,10 @@ Future<void> main() async {
   await demarrer();
 }
 
-/// Web only: on Android and iOS, App Check would need Play Integrity and DeviceCheck, which are not set up.
-final _appCheck = kIsWeb && Config.cleRecaptcha.isNotEmpty;
+/// Web: reCAPTCHA. iOS: a debug token, for personal test builds only. Android: not set up yet.
+final _appCheck = kIsWeb
+    ? Config.cleRecaptcha.isNotEmpty
+    : defaultTargetPlatform == TargetPlatform.iOS && Config.jetonDebugAppCheck.isNotEmpty;
 var _firebasePret = false;
 
 /// Firebase and the anonymous session must be up before the app can show anything. When they fail (offline, an
@@ -49,7 +52,10 @@ Future<Widget> _appConnectee() async {
     }
     // Firestore and Auth then attach App Check tokens by themselves; the backend gets one per request below.
     if (_appCheck) {
-      await FirebaseAppCheck.instance.activate(providerWeb: ReCaptchaEnterpriseProvider(Config.cleRecaptcha));
+      await FirebaseAppCheck.instance.activate(
+        providerWeb: kIsWeb ? ReCaptchaEnterpriseProvider(Config.cleRecaptcha) : null,
+        providerApple: const AppleDebugProvider(debugToken: Config.jetonDebugAppCheck),
+      );
     }
     _firebasePret = true;
   }
@@ -65,6 +71,7 @@ Future<Widget> _appConnectee() async {
       urlApi: Config.urlApi,
       jeton: session.jeton,
       jetonApp: _appCheck ? FirebaseAppCheck.instance.getToken : null,
+      client: clientHttp(),
     ),
   );
 }
