@@ -26,8 +26,10 @@ Future<void> main() async {
   await demarrer();
 }
 
-/// Web only: on Android and iOS, App Check would need Play Integrity and DeviceCheck, which are not set up.
-final _appCheck = kIsWeb && Config.cleRecaptcha.isNotEmpty;
+/// Web: reCAPTCHA. iOS: a debug token, for personal test builds only. Android: not set up yet.
+final _appCheck = kIsWeb
+    ? Config.cleRecaptcha.isNotEmpty
+    : defaultTargetPlatform == TargetPlatform.iOS && Config.jetonDebugAppCheck.isNotEmpty;
 var _firebasePret = false;
 
 /// Firebase and the anonymous session must be up before the app can show anything. When they fail (offline, an
@@ -49,7 +51,10 @@ Future<Widget> _appConnectee() async {
     }
     // Firestore and Auth then attach App Check tokens by themselves; the backend gets one per request below.
     if (_appCheck) {
-      await FirebaseAppCheck.instance.activate(providerWeb: ReCaptchaEnterpriseProvider(Config.cleRecaptcha));
+      await FirebaseAppCheck.instance.activate(
+        providerWeb: kIsWeb ? ReCaptchaEnterpriseProvider(Config.cleRecaptcha) : null,
+        providerApple: const AppleDebugProvider(debugToken: Config.jetonDebugAppCheck),
+      );
     }
     _firebasePret = true;
   }

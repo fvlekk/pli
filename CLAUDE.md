@@ -8,7 +8,7 @@ UI text is French; code, comments and docs are English.
 ## Layout
 | Path | What |
 |---|---|
-| `app/` | Flutter app (web + Android + iOS). Firebase Auth (anonymous) + Firestore, calls the backend to read letters. |
+| `app/` | Flutter app (web + Android + iOS). Firebase Auth (anonymous, optional Google) + Firestore + App Check (web; debug token on iOS test builds), calls the backend to read letters. |
 | `backend/` | Python 3.12, FastAPI, stateless. `POST /v1/extractions`: letter (text, PDF, image) → structured deadline. |
 | `backend/evals/` | Synthetic letters + expected answers. The extractor is judged here, never by eye. |
 | `firebase/` | `firestore.rules` + rules tests on the emulator. |
@@ -58,6 +58,11 @@ cd app && flutter build web --release --no-wasm-dry-run --output build/web-app \
   --dart-define=PLI_RECAPTCHA_CLE=...   # App Check (web only); empty = off
 #   values: npx firebase apps:sdkconfig WEB --project plii-ba3d8, reCAPTCHA Enterprise site key (all public, not secrets)
 #   backend: PLI_APP_CHECK=1 requires the App Check token; unset, it is only checked and logged (app_check: ...)
+
+# iOS (no Mac): Codemagic builds an unsigned IPA (`codemagic.yaml`, started by hand, values in its group `pli_ios`),
+# Sideloadly installs it from Windows with a free Apple ID (expires after 7 days). Its App Check debug token is for
+# personal test builds only: never in the repo, Secure in Codemagic, revoked after the test. It sits in clear in the
+# IPA: keep the IPA private. Group values come from `apps:sdkconfig IOS`, not WEB. Not a release path.
 ```
 On web, the Firebase emulator banner covers the
 bottom button: remove `.firebase-emulator-warning` when scripting screenshots.

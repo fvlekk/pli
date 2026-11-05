@@ -1,0 +1,34 @@
+# Unsigned iOS build for a personal test: no Mac here, signed on Windows with Sideloadly. Started by hand.
+# The values live in the Codemagic environment group `pli_ios`, never in this public repo.
+workflows:
+  ios-sideload:
+    name: iOS (unsigned, sideload)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      flutter: 3.47.7
+      xcode: latest
+      groups:
+        - pli_ios
+    scripts:
+      - name: Dependencies
+        working_directory: app
+        script: flutter pub get
+      - name: Build
+        working_directory: app
+        script: |
+          flutter build ios --release --no-codesign \
+            --dart-define=PLI_API_URL=https://pli-rif0.onrender.com \
+            --dart-define=PLI_FIREBASE_PROJET=plii-ba3d8 \
+            --dart-define=PLI_FIREBASE_APP_ID="$PLI_FIREBASE_APP_ID" \
+            --dart-define=PLI_FIREBASE_API_KEY="$PLI_FIREBASE_API_KEY" \
+            --dart-define=PLI_FIREBASE_SENDER_ID="$PLI_FIREBASE_SENDER_ID" \
+            --dart-define=PLI_APP_CHECK_JETON_DEBUG="$PLI_APP_CHECK_JETON_DEBUG"
+      - name: Package
+        working_directory: app
+        script: |
+          mkdir Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qry Pli-unsigned.ipa Payload
+    artifacts:
+      - app/Pli-unsigned.ipa
