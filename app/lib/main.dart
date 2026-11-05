@@ -11,6 +11,7 @@ import 'config.dart';
 import 'demo/depot_memoire.dart';
 import 'demo/lecteur_demo.dart';
 import 'ecrans/demarrage.dart';
+import 'outils/client_http_stub.dart' if (dart.library.io) 'outils/client_http_natif.dart';
 import 'services/depot_echeances.dart';
 import 'services/lecteur_courrier.dart';
 import 'services/session.dart';
@@ -70,6 +71,7 @@ Future<Widget> _appConnectee() async {
       urlApi: Config.urlApi,
       jeton: session.jeton,
       jetonApp: _appCheck ? FirebaseAppCheck.instance.getToken : null,
+      client: clientHttp(),
     ),
   );
 }
