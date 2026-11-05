@@ -36,7 +36,7 @@ iOS test status: the app builds, installs with `fr.pli.pli`, starts. Reading fai
 `cupertino_http` (Apple's URL Loading System). To check on the phone. The cause of the lookup failure itself is not
 known. Temporary diagnostic in `lecteur_courrier.dart` shows the real error: remove it after.
 
-## In progress (2026-11-05): audit fixes, branch `fix/audit-2026-11-05` (from `feat/ios`, NOT committed)
+## In progress (2026-11-05): audit fixes, branch `fix/audit-2026-11-05` (from `feat/ios`, pushed, no PR yet)
 Report: `audits/AUDIT-2026-11-05.md` (local only, excluded by `.git/info/exclude`: the repo is public, never commit it).
 Fixed: pypdf and other advisories, daily caps, image real type, offline save (no false success, late answer reported,
 back blocked), wake on the add screen, web headers, emulator guard on Render, startup warnings, contract test, token and
@@ -44,7 +44,7 @@ limits before the body, 4 readings at once, body read timeout, memory released a
 reading fails, no false empty list offline, stale list after an account change, ambiguous amounts refused.
 Checks: backend 128, app 94, rules 29, web build and local E2E (1440, 390, Firestore cut) OK, memory under 512 MB locally
 with provider errors. Not verified: iOS build, native flows, deployed headers, RSS on Render. Nothing deployed.
-Next: Falek's go for commit + push, then Codemagic builds this branch (it needs `cupertino_http` too), reinstall with
+Next: Codemagic builds this branch (it needs `cupertino_http` too), reinstall with
 Sideloadly, test paste, photo, PDF, save, Google. Then remove the diagnostic, revoke the debug token, delete the
 Codemagic variable and the IPA copies (CFG-002), restrict the iOS key (CFG-005), merge, deploy Render and the web app.
 Before real use: privacy notice.
