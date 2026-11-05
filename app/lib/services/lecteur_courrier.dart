@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import '../config.dart';
 import '../modeles/lecture.dart';
 
 sealed class CourrierAEnvoyer {
@@ -94,8 +95,10 @@ class LecteurHttp implements LecteurCourrier {
           .timeout(const Duration(seconds: 90));
     } on TimeoutException {
       throw const LectureImpossible('La lecture prend trop de temps. Réessaie, ou saisis l\'échéance à la main.');
-    } on http.ClientException {
-      throw const LectureImpossible('Pas de connexion au service de lecture. Vérifie ta connexion et réessaie.');
+    } on http.ClientException catch (e) {
+      // Temporary, iOS test builds only: this message hides why the call fails on the phone.
+      final detail = Config.jetonDebugAppCheck.isEmpty ? '' : ' [$e]';
+      throw LectureImpossible('Pas de connexion au service de lecture. Vérifie ta connexion et réessaie.$detail');
     }
 
     final json = _json(reponse);

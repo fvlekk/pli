@@ -31,6 +31,10 @@ secret and the IPA copies (the token is readable inside). Watch: images imported
 (`image_stub.dart`); « recharge la page » messages read oddly in a native app; a failed build log could expose
 `DART_DEFINES`: check it, revoke the token if so.
 
+iOS test status: the app builds, installs with `fr.pli.pli`, starts. Reading fails with « Pas de connexion au service
+de lecture » (`http.ClientException`) on Wi-Fi and 4G/5G; the IPA holds the right backend URL, Render's logs seem not
+to show the phone's calls. Temporary diagnostic in `lecteur_courrier.dart` shows the real error: remove it after.
+
 ## Next step
 1. Falek: redeploy Render once (« Deploy latest commit »): the new prompt (X−1 rule, action definitions) is in
    `main` but not live yet.
