@@ -36,6 +36,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>GIDClientID</key>
+	<string>674678863617-m6k5seb2f4lg6efk35d5p2ogd7970kkn.apps.googleusercontent.com</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
