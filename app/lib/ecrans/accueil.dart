@@ -9,10 +9,10 @@ import '../services/depot_echeances.dart';
 import '../services/lecteur_courrier.dart';
 import '../services/session.dart';
 import '../theme.dart';
-import '../widgets/carte_cliquable.dart';
 import '../widgets/carte_echeance.dart';
 import '../widgets/notification.dart';
 import 'ajout.dart';
+import 'feuille_compte.dart';
 
 class EcranAccueil extends StatefulWidget {
   const EcranAccueil({
@@ -60,10 +60,11 @@ class _EcranAccueilState extends State<EcranAccueil> {
   }
 
   Future<void> _ajouter(BuildContext context) async {
-    final enregistree = await Navigator.of(context).push<Echeance>(
-      MaterialPageRoute(
-        builder: (_) => EcranAjout(depot: widget.depot, lecteur: widget.lecteur, maintenant: widget.maintenant),
-      ),
+    final enregistree = await ouvrirAjout(
+      context,
+      depot: widget.depot,
+      lecteur: widget.lecteur,
+      maintenant: widget.maintenant,
     );
     if (enregistree != null && context.mounted) {
       notifier(
@@ -164,7 +165,12 @@ class _Contenu extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(Espaces.l, Espaces.m, Espaces.l, Espaces.l),
       children: [
-        const Text('pli', style: Textes.marque),
+        Row(
+          children: [
+            const Expanded(child: Text('pli', style: Textes.marque)),
+            if (compte case final compte?) BoutonCompte(compte: compte, onCompteChange: onCompteChange),
+          ],
+        ),
         const SizedBox(height: Espaces.l),
         const Text('Tes échéances 📬', style: Textes.titre),
         if (sections.isNotEmpty) ...[
@@ -193,10 +199,6 @@ class _Contenu extends StatelessWidget {
               children: [for (final e in faites) _carte(context, e)],
             ),
           ),
-        if (compte case final compte?) ...[
-          const SizedBox(height: Espaces.l),
-          _CarteCompte(compte: compte, listeVide: echeances.isEmpty, onCompteChange: onCompteChange),
-        ],
       ],
     );
   }
@@ -237,7 +239,7 @@ class _Detail extends StatelessWidget {
         messager,
         fait ? 'Marqué comme fait' : 'Remis à faire',
         detail: echeance.titre,
-        action: SnackBarAction(label: 'Annuler', onPressed: () => unawaited(_marquerSansAnnonce(messager, !fait))),
+        action: (libelle: 'Annuler', onPressed: () => unawaited(_marquerSansAnnonce(messager, !fait))),
       );
     } catch (_) {
       _signalerEchec(messager);
@@ -363,89 +365,6 @@ class _Message extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(Espaces.l),
         child: Text(texte, style: Textes.corps, textAlign: TextAlign.center),
-      ),
-    );
-  }
-}
-
-/// Anonymous until the user asks: then the list is kept with their Google account, to find it on another phone.
-class _CarteCompte extends StatefulWidget {
-  const _CarteCompte({required this.compte, required this.listeVide, this.onCompteChange});
-
-  final Compte compte;
-  final bool listeVide;
-  final VoidCallback? onCompteChange;
-
-  @override
-  State<_CarteCompte> createState() => _CarteCompteState();
-}
-
-class _CarteCompteState extends State<_CarteCompte> {
-  bool _enCours = false;
-
-  Future<void> _garder() async {
-    final messager = ScaffoldMessenger.of(context);
-    setState(() => _enCours = true);
-    try {
-      switch (await widget.compte.garderAvecGoogle(listeVide: widget.listeVide)) {
-        case ResultatGoogle.relie:
-          notifier(messager, 'Échéances gardées avec Google', detail: 'Tu les retrouveras sur un autre téléphone.');
-        case ResultatGoogle.connecte:
-          widget.onCompteChange?.call();
-        case ResultatGoogle.annule:
-          break;
-      }
-    } on CompteImpossible catch (e) {
-      notifier(
-        messager,
-        'Connexion Google impossible',
-        detail: e.message,
-        ton: TonNotification.alerte,
-        duree: const Duration(seconds: 8),
-      );
-    } finally {
-      if (mounted) setState(() => _enCours = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!widget.compte.estAnonyme) {
-      final email = widget.compte.email;
-      return Text(
-        email == null ? 'Échéances gardées avec ton compte Google.' : 'Échéances gardées avec $email.',
-        style: Textes.discret,
-        textAlign: TextAlign.center,
-      );
-    }
-    return CarteCliquable(
-      onTap: _enCours ? () {} : _garder,
-      child: Row(
-        children: [
-          const Text('🔐', style: TextStyle(fontSize: 22)),
-          const SizedBox(width: Espaces.m),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.listeVide ? 'Retrouver mes échéances avec Google' : 'Garder mes échéances avec Google',
-                  style: Textes.ligne,
-                ),
-                Text(
-                  widget.listeVide
-                      ? 'Si tu les as gardées sur un autre téléphone.'
-                      : 'Sans compte, elles sont liées à cet appareil et peuvent disparaître.',
-                  style: Textes.discret,
-                ),
-              ],
-            ),
-          ),
-          if (_enCours)
-            const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-          else
-            const Icon(Icons.chevron_right, color: Couleurs.encreDouce),
-        ],
       ),
     );
   }

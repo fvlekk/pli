@@ -3,19 +3,27 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
+import 'package:pli/services/depot_echeances.dart';
 import 'package:pli/services/session.dart';
 
 class _Identifiants extends Fake implements UserCredential {}
 
-class _Auth extends Fake implements FirebaseAuth {
+class _Utilisateur extends Fake implements User {
   String? jetonRecu;
 
   @override
-  Future<UserCredential> signInWithCredential(AuthCredential credential) async {
+  Future<UserCredential> linkWithCredential(AuthCredential credential) async {
     jetonRecu = (credential as OAuthCredential).idToken;
     return _Identifiants();
   }
 }
+
+class _Auth extends Fake implements FirebaseAuth {
+  @override
+  final _Utilisateur currentUser = _Utilisateur();
+}
+
+class _SansListe extends Fake implements ListeDeCompte {}
 
 class _Plateforme extends GoogleSignInPlatform {
   var initialisations = 0;
@@ -55,7 +63,7 @@ void main() {
   });
   tearDown(() => debugDefaultTargetPlatformOverride = null);
 
-  Future<ResultatGoogle> garder() => Session(auth).garderAvecGoogle(listeVide: true);
+  Future<ResultatGoogle> garder() => Session(auth, listeDe: (_) => _SansListe()).connecterAvecGoogle();
 
   final messageLisible = throwsA(isA<CompteImpossible>().having((e) => e.message, 'message', contains('Réessaie')));
 
@@ -64,24 +72,24 @@ void main() {
     plateforme.erreurInit = PlatformException(code: 'channel-error');
     await expectLater(garder(), messageLisible);
     plateforme.erreurInit = null;
-    expect(await garder(), ResultatGoogle.connecte);
+    expect(await garder(), ResultatGoogle.relie);
     expect(plateforme.initialisations, 2);
   });
 
   test('once it succeeded, the initialization never runs again', () async {
-    expect(await garder(), ResultatGoogle.connecte);
+    expect(await garder(), ResultatGoogle.relie);
     expect(plateforme.initialisations, 0);
   });
 
   test("Google's token reaches Firebase", () async {
-    expect(await garder(), ResultatGoogle.connecte);
-    expect(auth.jetonRecu, 'jeton-google');
+    expect(await garder(), ResultatGoogle.relie);
+    expect(auth.currentUser.jetonRecu, 'jeton-google');
   });
 
   test('closing the Google window is a cancel', () async {
     plateforme.erreurConnexion = const GoogleSignInException(code: GoogleSignInExceptionCode.canceled);
     expect(await garder(), ResultatGoogle.annule);
-    expect(auth.jetonRecu, isNull);
+    expect(auth.currentUser.jetonRecu, isNull);
   });
 
   test('a Google failure is a readable message', () async {
@@ -97,6 +105,6 @@ void main() {
   test('a sign-in without a token is a readable message, not a cancel', () async {
     plateforme.idToken = null;
     await expectLater(garder(), messageLisible);
-    expect(auth.jetonRecu, isNull);
+    expect(auth.currentUser.jetonRecu, isNull);
   });
 }

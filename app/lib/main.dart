@@ -59,7 +59,7 @@ Future<Widget> _appConnectee() async {
     }
     _firebasePret = true;
   }
-  final session = Session(FirebaseAuth.instance);
+  final session = Session(FirebaseAuth.instance, listeDe: (uid) => DepotFirestore(FirebaseFirestore.instance, uid));
   await session.ouvrir().timeout(const Duration(seconds: 20));
 
   return PliApp(

@@ -37,10 +37,20 @@ class PliApp extends StatelessWidget {
       supportedLocales: const [Locale('fr')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       // On a wide screen (web), keep a phone-width column instead of stretching the layout.
-      builder: (context, enfant) => ColoredBox(
-        color: Couleurs.fond,
-        child: Center(
-          child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 480), child: enfant),
+      // A number pad has no key to close it: a tap anywhere that is not a control closes the keyboard.
+      builder: (context, enfant) => GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        excludeFromSemantics: true,
+        onTap: () {
+          // No field focused: the focus is on the open sheet's scope, and it must stay there for Esc to close it.
+          final focus = FocusManager.instance.primaryFocus;
+          if (focus is! FocusScopeNode) focus?.unfocus();
+        },
+        child: ColoredBox(
+          color: Couleurs.fond,
+          child: Center(
+            child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 480), child: enfant),
+          ),
         ),
       ),
       home: EcranAccueil(
