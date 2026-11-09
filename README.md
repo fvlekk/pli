@@ -48,8 +48,9 @@ amount...). The app shows « À vérifier » when something is uncertain.
 fixed JSON schema (structured outputs). The injection letter is part of the eval.
 
 **5. The backend stores nothing.** It never logs the letter or the raw uid, only a hash, sizes, timings and
-token counts. (The model provider applies its own retention policy to API inputs. A production launch would use
-a zero-data-retention agreement, and the privacy notice would say so.) The user confirms the extraction in the app, and the app writes it to Firestore. The rules
+token counts. (The model provider applies its own retention policy to API inputs: Anthropic deletes them within
+30 days. A production launch would use a zero-data-retention agreement.) The in-app privacy notice says who receives
+what and for how long, and « Supprimer mes données » erases the user's deadlines and account. The user confirms the extraction in the app, and the app writes it to Firestore. The rules
 ([firestore.rules](firebase/firestore.rules)) only let users touch `users/{their uid}/echeances`. They also
 check the shape of every document, and the creation date must be the server's.
 
@@ -105,7 +106,7 @@ anything was committed. Each fix came with a test:
   save, with a misleading "check your connection". Both sides now share the same limits.
 - **A payment letter with no date found was shown as "nothing to do".** It now asks for the date.
 - **Anonymous accounts are free, so a per-user rate limit alone does not cap spending.** There is now an
-  instance-wide cap too. App Check is required before a public launch.
+  instance-wide cap, a per-IP cap (IPv6 by /64) against one machine cycling through fresh accounts, and App Check.
 - Smaller ones: password-protected PDFs crashed (now a 422), a date read far in the past crashed the date
   picker, "within 15 days of receipt" counted from Paris's date instead of the user's, the secret-detection job
   sat in a stage this pipeline does not have, and the paid eval would never have run on merge requests (CI key
@@ -115,7 +116,7 @@ anything was committed. Each fix came with a test:
 
 ```
  Flutter app ──(ID token + App Check)──▶ FastAPI (Docker) ──▶ Claude (structured output)
-     │                                   │  verifies both tokens, rate limit per uid,
+     │                                   │  verifies both tokens, rate limit per uid/IP,
      │                                   │  5 MB max, stores nothing
      │                                   └─▶ rule extractor (baseline, no key)
      │

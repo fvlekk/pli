@@ -44,6 +44,9 @@ abstract interface class Compte {
 
   Future<void> deconnecter();
 
+  /// Erases every deadline, then the account. False: the user closed the Google window, nothing was erased.
+  Future<bool> supprimerMesDonnees();
+
   /// True once the copy started by [ResultatGoogle.fusionEnCours] is on the server. Without network it waits. False: it
   /// was refused, and the deadlines exist nowhere else the user can reach.
   Future<bool> finFusion();
@@ -167,8 +170,9 @@ class Session implements Compte {
   /// The Google account already has its own Pli account: copy this device's deadlines there.
   ///
   /// Nothing is deleted first: until the copy is written, the deadlines must still exist somewhere.
-  /// shortcut: the anonymous copy stays in Firestore, unreachable (the rules need its session, gone by then). Clean it
-  /// up with the data deletion work (PRIV-002).
+  /// shortcut: the anonymous copy stays in Firestore, unreachable (the rules need its session, gone by then), and
+  /// « Supprimer mes données » cannot reach it. The privacy notice says to write to have it erased; a retention rule
+  /// for anonymous accounts (Firestore TTL, Identity Platform) would remove it.
   Future<ResultatGoogle> _fusionnerVers(AuthCredential? identifiants) async {
     if (identifiants == null) throw _echecGoogle('no-credential');
     final List<Echeance> aReprendre;
@@ -220,6 +224,54 @@ class Session implements Compte {
     await _auth.signOut();
   }
 
+  /// A Google account proves who it is first (Firebase deletes an account only after a recent sign-in), so a cancel
+  /// erases nothing. Then the deadlines, while the session can still reach them, then the account itself.
+  @override
+  Future<bool> supprimerMesDonnees() async {
+    final utilisateur = _auth.currentUser;
+    if (utilisateur == null) throw const CompteImpossible('Suppression impossible pour le moment. Réessaie.');
+    final anonyme = utilisateur.isAnonymous;
+    try {
+      if (!anonyme && !await _confirmerIdentite(utilisateur)) return false;
+    } on FirebaseAuthException catch (e) {
+      if (_fenetresFermees.contains(e.code)) return false;
+      if (e.code == 'user-mismatch') {
+        throw CompteImpossible('Choisis le compte Google de cette liste : ${utilisateur.email ?? 'le même'}.');
+      }
+      throw _erreurGoogle(e.code);
+    }
+    try {
+      // A copy still on its way would land after the erase, in a deleted account's list: let it finish first.
+      await _copie.then((_) => _listeDe(utilisateur.uid).effacer()).timeout(const Duration(seconds: 20));
+    } catch (_) {
+      throw const CompteImpossible('Échéances non supprimées : vérifie ta connexion, puis réessaie.');
+    }
+    try {
+      await utilisateur.delete();
+    } on FirebaseAuthException catch (e) {
+      // An account without Google cannot sign in again to prove it. Its list is already empty: leave it behind.
+      if (!anonyme || e.code != 'requires-recent-login') {
+        throw const CompteImpossible('Tes échéances sont supprimées, mais pas ton compte. Réessaie.');
+      }
+      await _auth.signOut();
+    }
+    if (_surIos && !anonyme) await _oublierGoogleSansEchec();
+    return true;
+  }
+
+  Future<bool> _confirmerIdentite(User utilisateur) async {
+    if (_surIos) {
+      final natif = await _identifiantsIos();
+      if (natif == null) return false;
+      await utilisateur.reauthenticateWithCredential(natif);
+    } else {
+      kIsWeb
+          ? await utilisateur.reauthenticateWithPopup(_google)
+          : await utilisateur.reauthenticateWithProvider(_google);
+    }
+    return true;
+  }
+
   /// The Firebase session is what opens the list: changing it must not depend on Google's SDK.
   Future<void> _oublierGoogleSansEchec() async {
     try {
@@ -227,20 +279,26 @@ class Session implements Compte {
     } catch (_) {}
   }
 
+  /// The user closed the Google window: a cancel, not an error.
+  static const _fenetresFermees = {
+    'popup-closed-by-user',
+    'cancelled-popup-request',
+    'web-context-canceled',
+    'web-context-cancelled',
+  };
+
   Future<ResultatGoogle> _traduireErreurs(Future<ResultatGoogle> Function() action) async {
     try {
       return await action();
     } on FirebaseAuthException catch (e) {
-      return switch (e.code) {
-        'popup-closed-by-user' ||
-        'cancelled-popup-request' ||
-        'web-context-canceled' ||
-        'web-context-cancelled' => ResultatGoogle.annule,
-        'popup-blocked' => throw const CompteImpossible(
-          'Ton navigateur a bloqué la fenêtre Google : autorise les fenêtres pour ce site, puis réessaie.',
-        ),
-        _ => throw _echecGoogle(e.code),
-      };
+      if (_fenetresFermees.contains(e.code)) return ResultatGoogle.annule;
+      throw _erreurGoogle(e.code);
     }
   }
+
+  static CompteImpossible _erreurGoogle(String code) => code == 'popup-blocked'
+      ? const CompteImpossible(
+          'Ton navigateur a bloqué la fenêtre Google : autorise les fenêtres pour ce site, puis réessaie.',
+        )
+      : _echecGoogle(code);
 }

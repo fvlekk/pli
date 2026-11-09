@@ -4,6 +4,7 @@ import asyncio
 import base64
 import binascii
 import gc
+import ipaddress
 import os
 import threading
 import time
@@ -65,6 +66,20 @@ def date_de_reception(annoncee: date | None, aujourdhui: date) -> date:
     return annoncee
 
 
+def ip_du_client(request: Request, entete: str) -> str | None:
+    """The client's address, IPv6 by /64 (a subscriber gets a whole /64). None when unknown. Never logged."""
+    brute = request.headers.get(entete, "") if entete else (request.client.host if request.client else "")
+    try:
+        adresse = ipaddress.ip_address(brute.strip())
+    except ValueError:
+        return None
+    if isinstance(adresse, ipaddress.IPv6Address):
+        if adresse.ipv4_mapped:
+            return str(adresse.ipv4_mapped)
+        return str(ipaddress.ip_network(f"{adresse}/64", strict=False))
+    return str(adresse)
+
+
 def aujourdhui_paris() -> date:
     return datetime.now(PARIS).date()
 
@@ -81,6 +96,8 @@ def creer_app(
         config.requetes_par_minute_instance,
         config.requetes_par_jour,
         config.requetes_par_jour_instance,
+        config.requetes_par_minute_ip,
+        config.requetes_par_jour_ip,
     )
     taille_max_requete = config.taille_max_octets * 4 // 3 + 4096  # base64 + JSON envelope
     places = threading.BoundedSemaphore(config.lectures_simultanees)
@@ -143,7 +160,8 @@ def creer_app(
             raise HTTPException(
                 503, "Connexion impossible pour le moment, réessaie", {"Retry-After": "30"}
             ) from None
-        if not limiteur.autoriser(uid):
+        request.state.ip = ip_du_client(request, config.entete_ip)
+        if not limiteur.autoriser(uid, request.state.ip):
             raise HTTPException(
                 429, "Trop de courriers d'un coup, réessaie dans une minute", {"Retry-After": "60"}
             )
@@ -213,7 +231,7 @@ def creer_app(
             courrier = Courrier(texte=demande.texte)
 
         # Charged here: a request refused above never reaches the model, so it costs no quota.
-        if not limiteur.autoriser_aujourdhui(uid):
+        if not limiteur.autoriser_aujourdhui(uid, request.state.ip):
             raise HTTPException(429, "Limite du jour atteinte, réessaie demain", {"Retry-After": "3600"})
 
         debut = time.perf_counter()
@@ -222,6 +240,8 @@ def creer_app(
             "extracteur": extracteur.nom,
             "media_type": courrier.media_type or "text",
             "app_check": request.state.app_check,
+            # Whether the per-IP limit applied: checks the proxy header after a deploy, never the address.
+            "ip": "connue" if request.state.ip else "absente",
         }
         try:
             resultat = extracteur.extraire(courrier, date_de_reception(demande.recu_le, aujourdhui()))
@@ -262,6 +282,9 @@ def creer_app_depuis_env() -> FastAPI:
         # Both are normal locally. On a host, a lost variable must not degrade in silence.
         if not config.app_check_obligatoire:
             journaliser("App Check n'est pas obligatoire (PLI_APP_CHECK)", "WARNING")
+        if os.environ.get("RENDER") and not config.entete_ip:
+            # The connection's address is then the proxy's: every user would share one IP allowance.
+            journaliser("PLI_ENTETE_IP manquant derrière le proxy de Render", "WARNING")
         if config.extracteur != "claude":
             journaliser("extracteur de secours sans Claude (ANTHROPIC_API_KEY)", "WARNING")
     extracteur = (

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:pli/app.dart';
 import 'package:pli/ecrans/ajout.dart';
+import 'package:pli/ecrans/confidentialite.dart';
 import 'package:pli/ecrans/feuille_compte.dart';
 import 'package:pli/ecrans/demarrage.dart';
 import 'package:pli/ecrans/verification.dart';
@@ -398,6 +399,89 @@ void main() {
       expect(compte.appels, ['changer', 'deconnecter']);
       expect(redemarrages, 2);
       expect(find.text('Se déconnecter'), findsNothing, reason: 'the sheet is closed');
+    });
+
+    /// The sheet scrolls on a small screen: bring the card into view first.
+    Future<void> toucherDansLeCompte(WidgetTester tester, String texte) async {
+      await tester.ensureVisible(find.text(texte));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(texte));
+      await tester.pumpAndSettle();
+    }
+
+    for (final anonyme in [true, false]) {
+      testWidgets('the privacy notice is in the account menu (${anonyme ? 'no account' : 'Google'})', (tester) async {
+        await accueil(tester, FauxDepot([echeance()]), FauxCompte(estAnonyme: anonyme, email: 'camille@exemple.fr'));
+        await ouvrirCompte(tester);
+        await toucherDansLeCompte(tester, 'Confidentialité');
+        expect(find.textContaining('Anthropic'), findsWidgets);
+        expect(find.textContaining(contactConfidentialite), findsWidgets);
+        expect(find.textContaining('CNIL'), findsOneWidget);
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        expect(find.text('Supprimer mes données'), findsOneWidget, reason: 'back on the menu');
+      });
+    }
+
+    testWidgets('deleting my data asks first, then restarts on an empty session', (tester) async {
+      var redemarrages = 0;
+      final compte = FauxCompte();
+      await accueil(tester, FauxDepot([echeance()]), compte, onCompteChange: () => redemarrages++);
+      await ouvrirCompte(tester);
+      await toucherDansLeCompte(tester, 'Supprimer mes données');
+      expect(find.text('Supprimer tes données ?'), findsOneWidget);
+      expect(compte.appels, isEmpty, reason: 'nothing before the user confirms');
+      await tester.tap(find.text('Supprimer'));
+      await tester.pumpAndSettle();
+      expect(compte.appels, ['supprimer']);
+      expect(redemarrages, 1);
+      expect(find.text('Tes données sont supprimées'), findsOneWidget);
+      expect(find.text('Supprimer mes données'), findsNothing, reason: 'the sheet is closed');
+    });
+
+    testWidgets('cancelling the question deletes nothing', (tester) async {
+      final compte = FauxCompte();
+      await accueil(tester, FauxDepot([echeance()]), compte);
+      await ouvrirCompte(tester);
+      await toucherDansLeCompte(tester, 'Supprimer mes données');
+      await tester.tap(find.text('Annuler'));
+      await tester.pumpAndSettle();
+      expect(compte.appels, isEmpty);
+      expect(find.text('Supprimer mes données'), findsOneWidget, reason: 'still on the menu');
+    });
+
+    testWidgets('a Google account is warned it will confirm who it is', (tester) async {
+      await accueil(tester, FauxDepot([echeance()]), FauxCompte(estAnonyme: false, email: 'camille@exemple.fr'));
+      await ouvrirCompte(tester);
+      await toucherDansLeCompte(tester, 'Supprimer mes données');
+      expect(find.textContaining('Google va te demander de confirmer'), findsOneWidget);
+    });
+
+    testWidgets('closing the Google window while deleting changes nothing', (tester) async {
+      var redemarrages = 0;
+      final compte = FauxCompte(estAnonyme: false, email: 'camille@exemple.fr')..suppression = false;
+      await accueil(tester, FauxDepot([echeance()]), compte, onCompteChange: () => redemarrages++);
+      await ouvrirCompte(tester);
+      await toucherDansLeCompte(tester, 'Supprimer mes données');
+      await tester.tap(find.text('Supprimer'));
+      await tester.pumpAndSettle();
+      expect(compte.appels, ['supprimer']);
+      expect(redemarrages, 0);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('a failed deletion is explained and the app stays on the list', (tester) async {
+      var redemarrages = 0;
+      final compte = FauxCompte()
+        ..erreurSuppression = const CompteImpossible('Échéances non supprimées : vérifie ta connexion, puis réessaie.');
+      await accueil(tester, FauxDepot([echeance()]), compte, onCompteChange: () => redemarrages++);
+      await ouvrirCompte(tester);
+      await toucherDansLeCompte(tester, 'Supprimer mes données');
+      await tester.tap(find.text('Supprimer'));
+      await tester.pumpAndSettle();
+      expect(find.text('Suppression impossible'), findsOneWidget);
+      expect(find.textContaining('vérifie ta connexion'), findsOneWidget);
+      expect(redemarrages, 0);
     });
 
     testWidgets('no account (demo): no account button', (tester) async {

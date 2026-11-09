@@ -12,7 +12,7 @@ import 'faux.dart';
 class _Identifiants extends Fake implements UserCredential {}
 
 class _Utilisateur extends Fake implements User {
-  _Utilisateur(this.uid, {this.erreur});
+  _Utilisateur(this.uid, {this.erreur, this.isAnonymous = true, this.email, this.erreurConfirmation});
 
   @override
   final String uid;
@@ -21,10 +21,37 @@ class _Utilisateur extends Fake implements User {
   String? jetonRecu;
 
   @override
-  bool get isAnonymous => true;
+  final bool isAnonymous;
 
   @override
-  String? get email => null;
+  final String? email;
+
+  /// What happened, in order: confirmations, then the deletion.
+  final etapes = <String>[];
+  final FirebaseAuthException? erreurConfirmation;
+  FirebaseAuthException? erreurSuppression;
+  _Auth? auth;
+
+  @override
+  Future<UserCredential> reauthenticateWithProvider(AuthProvider provider) async {
+    etapes.add('confirmer');
+    if (erreurConfirmation != null) throw erreurConfirmation!;
+    return _Identifiants();
+  }
+
+  @override
+  Future<UserCredential> reauthenticateWithCredential(AuthCredential credential) async {
+    etapes.add('confirmer:${(credential as OAuthCredential).idToken}');
+    if (erreurConfirmation != null) throw erreurConfirmation!;
+    return _Identifiants();
+  }
+
+  @override
+  Future<void> delete() async {
+    etapes.add('supprimer');
+    if (erreurSuppression != null) throw erreurSuppression!;
+    auth?.currentUser = null; // Like Firebase: a deleted account is signed out.
+  }
 
   @override
   Future<String?> getIdToken([bool forceRefresh = false]) async => 'jeton';
@@ -101,12 +128,21 @@ class _Liste implements ListeDeCompte {
     if (comptes.ecriture != null) await comptes.ecriture!();
     comptes.listes[uid] = [...?comptes.listes[uid], ...echeances];
   }
+
+  @override
+  Future<void> effacer() async {
+    if (comptes.effacement != null) await comptes.effacement!();
+    comptes.effaces.add(uid);
+    comptes.listes.remove(uid);
+  }
 }
 
 class _Comptes {
   final listes = <String, List<Echeance>>{};
+  final effaces = <String>[];
   Object? erreurLecture;
   Future<void> Function()? ecriture;
+  Future<void> Function()? effacement;
 
   ListeDeCompte de(String uid) => _Liste(uid, this);
 }
@@ -255,6 +291,148 @@ void main() {
     expect(auth.currentUser, isNull);
   });
 
+  group('deleting my data', () {
+    /// A signed-in user whose deletion reaches [auth] like Firebase does.
+    _Auth authAvec(_Utilisateur utilisateur) {
+      final auth = _Auth(currentUser: utilisateur);
+      utilisateur.auth = auth;
+      return auth;
+    }
+
+    test('without Google: the deadlines, then the account; the other lists stay', () async {
+      comptes.listes['anonyme'] = [echeance()];
+      comptes.listes['autre'] = [echeance()];
+      final utilisateur = _Utilisateur('anonyme');
+      final auth = authAvec(utilisateur);
+      expect(await session(auth).supprimerMesDonnees(), isTrue);
+      expect(comptes.effaces, ['anonyme']);
+      expect(comptes.listes.keys, ['autre']);
+      expect(utilisateur.etapes, ['supprimer']);
+      expect(auth.currentUser, isNull);
+    });
+
+    test('a Google account confirms who it is before anything is erased', () async {
+      comptes.listes['google'] = [echeance()];
+      final utilisateur = _Utilisateur('google', isAnonymous: false, email: 'a@exemple.fr');
+      final auth = authAvec(utilisateur);
+      comptes.effacement = () async => expect(utilisateur.etapes, ['confirmer']);
+      expect(await session(auth).supprimerMesDonnees(), isTrue);
+      expect(utilisateur.etapes, ['confirmer', 'supprimer']);
+      expect(comptes.effaces, ['google']);
+    });
+
+    for (final code in ['popup-closed-by-user', 'web-context-canceled']) {
+      test('closing the Google window ($code) erases nothing', () async {
+        comptes.listes['google'] = [echeance()];
+        final utilisateur = _Utilisateur(
+          'google',
+          isAnonymous: false,
+          erreurConfirmation: FirebaseAuthException(code: code),
+        );
+        expect(await session(authAvec(utilisateur)).supprimerMesDonnees(), isFalse);
+        expect(comptes.effaces, isEmpty);
+        expect(utilisateur.etapes, ['confirmer']);
+      });
+    }
+
+    test('another Google account than the list\'s own is refused, and nothing is erased', () async {
+      final utilisateur = _Utilisateur(
+        'google',
+        isAnonymous: false,
+        email: 'a@exemple.fr',
+        erreurConfirmation: FirebaseAuthException(code: 'user-mismatch'),
+      );
+      await expectLater(
+        session(authAvec(utilisateur)).supprimerMesDonnees(),
+        throwsA(isA<CompteImpossible>().having((e) => e.message, 'message', contains('a@exemple.fr'))),
+      );
+      expect(comptes.effaces, isEmpty);
+    });
+
+    test('a blocked Google window says how to allow it', () async {
+      final utilisateur = _Utilisateur(
+        'google',
+        isAnonymous: false,
+        erreurConfirmation: FirebaseAuthException(code: 'popup-blocked'),
+      );
+      await expectLater(
+        session(authAvec(utilisateur)).supprimerMesDonnees(),
+        throwsA(isA<CompteImpossible>().having((e) => e.message, 'message', contains('autorise les fenêtres'))),
+      );
+    });
+
+    test('offline, the account is kept: its deadlines are not all erased', () async {
+      comptes.effacement = () async => throw FirebaseException(plugin: 'cloud_firestore', code: 'unavailable');
+      final utilisateur = _Utilisateur('anonyme');
+      final auth = authAvec(utilisateur);
+      await expectLater(
+        session(auth).supprimerMesDonnees(),
+        throwsA(isA<CompteImpossible>().having((e) => e.message, 'message', contains('connexion'))),
+      );
+      expect(utilisateur.etapes, isEmpty);
+      expect(auth.currentUser, same(utilisateur));
+    });
+
+    testWidgets('a server that never answers is given up after 20 s, and the account is kept', (tester) async {
+      comptes.effacement = () => Completer<void>().future;
+      final utilisateur = _Utilisateur('anonyme');
+      Object? erreur;
+      unawaited(
+        session(authAvec(utilisateur)).supprimerMesDonnees().then<void>((_) {}, onError: (Object e) => erreur = e),
+      );
+      await tester.pump(const Duration(seconds: 19));
+      expect(erreur, isNull);
+      await tester.pump(const Duration(seconds: 2));
+      expect(erreur, isA<CompteImpossible>());
+      expect(utilisateur.etapes, isEmpty);
+    });
+
+    test('without Google, an old session that cannot delete itself is signed out, its list already empty', () async {
+      comptes.listes['anonyme'] = [echeance()];
+      final utilisateur = _Utilisateur('anonyme')
+        ..erreurSuppression = FirebaseAuthException(code: 'requires-recent-login');
+      final auth = authAvec(utilisateur);
+      expect(await session(auth).supprimerMesDonnees(), isTrue);
+      expect(comptes.effaces, ['anonyme']);
+      expect(auth.sorties, 1);
+      expect(auth.currentUser, isNull);
+    });
+
+    test('a Google account that could not be deleted says its deadlines are gone, and stays open', () async {
+      final utilisateur = _Utilisateur('google', isAnonymous: false)
+        ..erreurSuppression = FirebaseAuthException(code: 'network-request-failed');
+      final auth = authAvec(utilisateur);
+      await expectLater(
+        session(auth).supprimerMesDonnees(),
+        throwsA(isA<CompteImpossible>().having((e) => e.message, 'message', contains('pas ton compte'))),
+      );
+      expect(comptes.effaces, ['google']);
+      expect(auth.sorties, 0);
+    });
+
+    test('a merge copy still on its way finishes before the erase, so nothing lands in a deleted account', () async {
+      comptes.listes['anonyme'] = [echeance()];
+      final copie = Completer<void>();
+      comptes.ecriture = () => copie.future;
+      final auth = authEnConflit();
+      final s = session(auth);
+      expect(await s.connecterAvecGoogle(), ResultatGoogle.fusionEnCours);
+      final google = _Utilisateur('google', isAnonymous: false)..auth = auth;
+      auth.currentUser = google;
+      final suppression = s.supprimerMesDonnees();
+      await Future<void>.delayed(Duration.zero);
+      expect(comptes.effaces, isEmpty, reason: 'waits for the copy');
+      copie.complete();
+      expect(await suppression, isTrue);
+      expect(comptes.effaces, ['google']);
+      expect(comptes.listes['google'], isNull, reason: 'the copied deadlines are erased too');
+    });
+
+    test('without a session, a message instead of a crash', () async {
+      await expectLater(session(_Auth()).supprimerMesDonnees(), throwsA(isA<CompteImpossible>()));
+    });
+  });
+
   group('on iOS, Google signs in through its own SDK', () {
     setUp(() => debugDefaultTargetPlatformOverride = TargetPlatform.iOS);
     tearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -307,6 +485,23 @@ void main() {
       ).deconnecter();
       expect(oublis, 1);
       expect(auth.sorties, 1);
+    });
+    test("deleting a Google account confirms it with Google's token, then forgets Google's session", () async {
+      var oublis = 0;
+      final utilisateur = _Utilisateur('google', isAnonymous: false);
+      final auth = _Auth(currentUser: utilisateur);
+      utilisateur.auth = auth;
+      expect(await session(auth, oublier: () async => oublis++).supprimerMesDonnees(), isTrue);
+      expect(utilisateur.etapes, ['confirmer:jeton-google', 'supprimer']);
+      expect(oublis, 1);
+    });
+
+    test('closing the Google window while deleting erases nothing', () async {
+      final utilisateur = _Utilisateur('google', isAnonymous: false);
+      final auth = _Auth(currentUser: utilisateur);
+      expect(await session(auth, jetonGoogle: () async => null).supprimerMesDonnees(), isFalse);
+      expect(utilisateur.etapes, isEmpty);
+      expect(comptes.effaces, isEmpty);
     });
   });
 }

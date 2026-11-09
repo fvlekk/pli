@@ -18,6 +18,9 @@ class Config:
     requetes_par_minute_instance: int
     requetes_par_jour: int
     requetes_par_jour_instance: int
+    requetes_par_minute_ip: int
+    requetes_par_jour_ip: int
+    entete_ip: str
     lectures_simultanees: int
     taille_max_octets: int
     pages_max: int
@@ -43,6 +46,12 @@ class Config:
             requetes_par_minute_instance=int(env.get("PLI_REQUETES_PAR_MINUTE_INSTANCE", "60")),
             requetes_par_jour=int(env.get("PLI_REQUETES_PAR_JOUR", "30")),
             requetes_par_jour_instance=int(env.get("PLI_REQUETES_PAR_JOUR_INSTANCE", "500")),
+            # Above one user's own limits: a household or an office shares one address.
+            requetes_par_minute_ip=int(env.get("PLI_REQUETES_PAR_MINUTE_IP", "15")),
+            requetes_par_jour_ip=int(env.get("PLI_REQUETES_PAR_JOUR_IP", "60")),
+            # Behind a proxy, the header holding the client's address that the client cannot set (Render:
+            # True-Client-IP, set by its Cloudflare edge). Empty: the connection's own address, right locally.
+            entete_ip=env.get("PLI_ENTETE_IP", "").strip(),
             # Each reading in progress holds about 75 MB (a 5 MB file, in several forms) on a 512 MB instance.
             lectures_simultanees=int(env.get("PLI_LECTURES_SIMULTANEES", "4")),
             taille_max_octets=int(env.get("PLI_TAILLE_MAX_OCTETS", str(5 * 1024 * 1024))),
