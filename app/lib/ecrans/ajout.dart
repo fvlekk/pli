@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,12 +10,12 @@ import '../config.dart';
 import '../exemples.dart';
 import '../modeles/echeance.dart';
 import '../modeles/lecture.dart';
-import '../outils/image_stub.dart' if (dart.library.js_interop) '../outils/image_web.dart';
+import '../outils/image_natif.dart' if (dart.library.js_interop) '../outils/image_web.dart';
 import '../outils/selection_stub.dart' if (dart.library.js_interop) '../outils/selection_web.dart';
 import '../services/depot_echeances.dart';
 import '../services/lecteur_courrier.dart';
 import '../theme.dart';
-import '../widgets/carte_cliquable.dart';
+import '../widgets/choix.dart';
 import 'verification.dart';
 
 /// Picking or reading a file can fail on a phone (permission, a huge photo, browser quirks): say so, never stay
@@ -32,18 +33,35 @@ const _typesFichier = {
   'webp': 'image/webp',
 };
 
-class EcranAjout extends StatefulWidget {
-  const EcranAjout({super.key, required this.depot, required this.lecteur, required this.maintenant});
+/// The ways to add a letter, over the list: returns the saved deadline, null if the user closed the sheet.
+Future<Echeance?> ouvrirAjout(
+  BuildContext context, {
+  required DepotEcheances depot,
+  required LecteurCourrier lecteur,
+  required DateTime Function() maintenant,
+}) => showModalBottomSheet<Echeance>(
+  context: context,
+  backgroundColor: Couleurs.fond,
+  showDragHandle: true,
+  // The text field and its keyboard can need more than the default 9/16 of the screen.
+  isScrollControlled: true,
+  useSafeArea: true,
+  builder: (_) => FeuilleAjout(depot: depot, lecteur: lecteur, maintenant: maintenant),
+);
+
+/// Closing the sheet during a reading cancels it for the user: the answer is dropped.
+class FeuilleAjout extends StatefulWidget {
+  const FeuilleAjout({super.key, required this.depot, required this.lecteur, required this.maintenant});
 
   final DepotEcheances depot;
   final LecteurCourrier lecteur;
   final DateTime Function() maintenant;
 
   @override
-  State<EcranAjout> createState() => _EcranAjoutState();
+  State<FeuilleAjout> createState() => _FeuilleAjoutState();
 }
 
-class _EcranAjoutState extends State<EcranAjout> {
+class _FeuilleAjoutState extends State<FeuilleAjout> {
   final _texte = TextEditingController();
   final _defilement = ScrollController();
   bool _enCours = false;
@@ -138,17 +156,43 @@ class _EcranAjoutState extends State<EcranAjout> {
       return null;
     }
     final octets = await fichier.readAsBytes();
-    // A phone photo is often 5-12 MB: shrink it in the browser (readable, faster, no GPS metadata).
+    // A phone photo is often 5-12 MB: shrink it before sending (readable, faster, no GPS metadata).
     final reduite = type.startsWith('image/') ? await reduireImage(octets) : null;
     return reduite == null
         ? CourrierFichier(mediaType: type, octets: octets)
         : CourrierFichier(mediaType: 'image/jpeg', octets: reduite);
   });
 
-  Future<void> _photographier() => _lireFichier(() async {
-    final photo = await ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 2000, imageQuality: 80);
+  /// The picker shrinks the photo. A screenshot can stay a PNG: the backend reads the real type from the bytes.
+  Future<void> _choisirImage(ImageSource source) => _lireFichier(() async {
+    final photo = await ImagePicker().pickImage(source: source, maxWidth: 2000, imageQuality: 80);
     return photo == null ? null : CourrierFichier(mediaType: 'image/jpeg', octets: await photo.readAsBytes());
   });
+
+  /// A browser's file picker already offers the sources on a phone. Elsewhere, the app asks through this menu.
+  Future<void> _choisirSource() async {
+    if (kIsWeb) return _importer();
+    final choisir = await showCupertinoModalPopup<Future<void> Function()>(
+      context: context,
+      builder: (menu) {
+        Widget option(String titre, Future<void> Function() action) =>
+            CupertinoActionSheetAction(onPressed: () => Navigator.of(menu).pop(action), child: Text(titre));
+        return CupertinoActionSheet(
+          actions: [
+            option('Prendre une photo', () => _choisirImage(ImageSource.camera)),
+            option('Choisir dans mes photos', () => _choisirImage(ImageSource.gallery)),
+            option('Choisir un fichier', _importer),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(menu).pop(),
+            child: const Text('Annuler'),
+          ),
+        );
+      },
+    );
+    if (mounted) await choisir?.call();
+  }
 
   String get _consigne {
     if (_enCours) return _lent ? 'Le service se réveille, ça peut prendre une minute…' : 'Je lis ton courrier…';
@@ -162,150 +206,92 @@ class _EcranAjoutState extends State<EcranAjout> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Ajouter un courrier')),
-      body: SafeArea(
+    return Padding(
+      // Above the keyboard when the text field is open.
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SafeArea(
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             if (_enCours) const LinearProgressIndicator(backgroundColor: Couleurs.corailPale),
-            Expanded(
+            Flexible(
               child: AbsorbPointer(
                 absorbing: _enCours,
                 child: ListView(
                   controller: _defilement,
-                  padding: const EdgeInsets.fromLTRB(Espaces.l, Espaces.s, Espaces.l, Espaces.l),
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(Espaces.l, Espaces.s, Espaces.l, Espaces.m),
                   children: [
-                    Text(_consigne, style: Textes.corps.copyWith(color: Couleurs.encreDouce)),
+                    const Text('Ajouter un courrier', style: Textes.section),
+                    const SizedBox(height: Espaces.xs),
+                    Text(_consigne, style: Textes.discret),
                     if (_erreur != null) ...[const SizedBox(height: Espaces.m), _Alerte(texte: _erreur!)],
-                    const SizedBox(height: Espaces.l),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (!kIsWeb)
-                          _Choix(
-                            emoji: '📸',
-                            titre: 'Prendre une photo',
-                            detail: 'Le courrier à plat, bien éclairé',
-                            onTap: _photographier,
-                          ),
-                        _Choix(
-                          emoji: '📄',
-                          titre: 'Importer un PDF ou une image',
-                          detail: '5 Mo maximum',
-                          onTap: _importer,
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _Choix(
-                              emoji: '📋',
-                              titre: 'Coller le texte',
-                              detail: 'Depuis un mail ou un espace en ligne',
-                              onTap: () => setState(() => _texteOuvert = !_texteOuvert),
-                            ),
-                            if (_texteOuvert)
-                              Padding(
-                                padding: const EdgeInsets.only(top: Espaces.m),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  children: [
-                                    TextField(
-                                      controller: _texte,
-                                      minLines: 5,
-                                      maxLines: 12,
-                                      maxLength: 50000,
-                                      decoration: const InputDecoration(labelText: 'Texte du courrier'),
-                                    ),
-                                    const SizedBox(height: Espaces.s),
-                                    FilledButton(
-                                      onPressed: () {
-                                        if (_texte.text.trim().isEmpty) {
-                                          setState(() => _erreur = 'Colle d\'abord le texte du courrier.');
-                                          return;
-                                        }
-                                        _lire(CourrierTexte(_texte.text));
-                                      },
-                                      child: const Text('Lire ce texte'),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
+                    const SizedBox(height: Espaces.m),
+                    Choix(
+                      emoji: '📄',
+                      titre: 'Importer un courrier',
+                      detail: 'Photo ou PDF, 5 Mo maximum',
+                      onTap: _choisirSource,
                     ),
-                    _Choix(
+                    Choix(
+                      emoji: '📋',
+                      titre: 'Coller le texte',
+                      detail: 'Depuis un mail ou un espace en ligne',
+                      onTap: () => setState(() => _texteOuvert = !_texteOuvert),
+                    ),
+                    if (_texteOuvert) ...[
+                      TextField(
+                        controller: _texte,
+                        minLines: 5,
+                        maxLines: 12,
+                        maxLength: 50000,
+                        decoration: const InputDecoration(labelText: 'Texte du courrier'),
+                      ),
+                      const SizedBox(height: Espaces.s),
+                      FilledButton(
+                        onPressed: () {
+                          if (_texte.text.trim().isEmpty) {
+                            _signaler('Colle d\'abord le texte du courrier.');
+                            return;
+                          }
+                          _lire(CourrierTexte(_texte.text));
+                        },
+                        child: const Text('Lire ce texte'),
+                      ),
+                      const SizedBox(height: Espaces.m),
+                    ],
+                    Choix(
                       emoji: '✏️',
                       titre: 'Saisir à la main',
                       detail: 'Si la lecture ne marche pas',
                       onTap: () => _verifier(Lecture.manuelle()),
                     ),
-                    const SizedBox(height: Espaces.l),
-                    const Text('Pas de courrier sous la main ?', style: Textes.section),
-                    const SizedBox(height: Espaces.xs),
-                    const Text('Essaie avec un courrier fictif.', style: Textes.discret),
-                    const SizedBox(height: Espaces.m),
-                    for (final exemple in exemples)
-                      _Choix(
-                        emoji: '✉️',
-                        titre: exemple.titre,
-                        detail: 'Courrier fictif',
-                        onTap: () => _lire(CourrierTexte(exemple.texte)),
+                    // The demo only reads these. On the real app, each one would be a paid reading.
+                    if (Config.demo) ...[
+                      const SizedBox(height: Espaces.s),
+                      const Text('Pas de courrier sous la main ?', style: Textes.section),
+                      const SizedBox(height: Espaces.xs),
+                      const Text('Essaie avec un courrier fictif.', style: Textes.discret),
+                      const SizedBox(height: Espaces.m),
+                      for (final exemple in exemples)
+                        Choix(
+                          emoji: '✉️',
+                          titre: exemple.titre,
+                          detail: 'Courrier fictif',
+                          onTap: () => _lire(CourrierTexte(exemple.texte)),
+                        ),
+                      const Text(
+                        'Démo : la lecture réelle passe par le backend avec Claude.',
+                        style: Textes.discret,
+                        textAlign: TextAlign.center,
                       ),
+                    ],
                   ],
                 ),
               ),
             ),
-            if (Config.demo)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(Espaces.m, Espaces.s, Espaces.m, Espaces.m),
-                child: Text(
-                  'Démo : la lecture réelle passe par le backend avec Claude.',
-                  style: Textes.discret,
-                  textAlign: TextAlign.center,
-                ),
-              ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// An option as a Buddy-style card: an emoji in a soft circle, a title and a hint.
-class _Choix extends StatelessWidget {
-  const _Choix({required this.emoji, required this.titre, required this.detail, required this.onTap});
-
-  final String emoji;
-  final String titre;
-  final String detail;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return CarteCliquable(
-      onTap: onTap,
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(color: Couleurs.corailPale, shape: BoxShape.circle),
-            child: Text(emoji, style: const TextStyle(fontSize: 22)),
-          ),
-          const SizedBox(width: Espaces.m),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(titre, style: Textes.ligne),
-                Text(detail, style: Textes.discret),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right, color: Couleurs.encreDouce),
-        ],
       ),
     );
   }

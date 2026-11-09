@@ -107,13 +107,33 @@ class FauxCompte implements Compte {
   String? email;
   final ResultatGoogle resultat;
   final CompteImpossible? erreur;
-  final demandes = <bool>[];
+  final appels = <String>[];
 
-  @override
-  Future<ResultatGoogle> garderAvecGoogle({required bool listeVide}) async {
-    demandes.add(listeVide);
+  /// One answer per copy attempt.
+  final fusions = <bool>[true];
+
+  Future<ResultatGoogle> _google(String appel) async {
+    appels.add(appel);
     if (erreur != null) throw erreur!;
     if (resultat == ResultatGoogle.relie) estAnonyme = false;
     return resultat;
+  }
+
+  @override
+  Future<ResultatGoogle> connecterAvecGoogle() => _google('connecter');
+
+  @override
+  Future<ResultatGoogle> changerDeCompte() => _google('changer');
+
+  @override
+  Future<void> deconnecter() async => appels.add('deconnecter');
+
+  @override
+  Future<bool> finFusion() async => fusions.first;
+
+  @override
+  void relancerFusion() {
+    appels.add('relancer');
+    fusions.removeAt(0);
   }
 }

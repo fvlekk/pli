@@ -42,6 +42,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Pli utilise l'appareil photo pour lire ton courrier.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Pli utilise tes photos pour lire le courrier que tu choisis.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

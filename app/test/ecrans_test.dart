@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:pli/app.dart';
 import 'package:pli/ecrans/ajout.dart';
+import 'package:pli/ecrans/feuille_compte.dart';
 import 'package:pli/ecrans/demarrage.dart';
 import 'package:pli/ecrans/verification.dart';
 import 'package:pli/modeles/echeance.dart';
@@ -13,6 +15,7 @@ import 'package:pli/services/depot_echeances.dart';
 import 'package:pli/services/lecteur_courrier.dart';
 import 'package:pli/services/session.dart';
 import 'package:pli/theme.dart';
+import 'package:pli/widgets/choix.dart';
 
 import 'faux.dart';
 
@@ -25,10 +28,36 @@ Widget verification(FauxDepot depot, {required dynamic l}) => MaterialApp(
 );
 
 /// The samples sit at the bottom of the add screen, built only once close to the screen.
-Future<void> montrerLExemple(WidgetTester tester) async {
-  await tester.scrollUntilVisible(find.text('Une amende'), 200, scrollable: find.byType(Scrollable).last);
-  await tester.ensureVisible(find.text('Une amende'));
+/// The sheet's list only builds what fits: brings an option into view.
+Future<void> montrerDansLaFeuille(WidgetTester tester, Finder cible) async {
+  final liste = find.descendant(of: find.byType(FeuilleAjout), matching: find.byType(Scrollable)).first;
+  await tester.scrollUntilVisible(cible, 100, scrollable: liste);
   await tester.pumpAndSettle();
+}
+
+/// From the open sheet: pastes a letter and starts reading it.
+Future<void> lireUnTexte(WidgetTester tester) async {
+  await montrerDansLaFeuille(tester, find.text('Coller le texte'));
+  await tester.tap(find.text('Coller le texte'));
+  await tester.pumpAndSettle();
+  await montrerDansLaFeuille(tester, find.text('Lire ce texte'));
+  await tester.enterText(find.widgetWithText(TextField, 'Texte du courrier'), 'Un courrier fictif.');
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Lire ce texte'));
+}
+
+class _CompteCasse extends FauxCompte {
+  @override
+  Future<ResultatGoogle> connecterAvecGoogle() async => throw StateError('panne');
+}
+
+class _CompteLent extends FauxCompte {
+  _CompteLent(this.sortie) : super(estAnonyme: false, email: 'camille@exemple.fr');
+
+  final Future<void> Function() sortie;
+
+  @override
+  Future<void> deconnecter() => sortie();
 }
 
 void main() {
@@ -79,8 +108,7 @@ void main() {
 
     await tester.tap(find.text('Ajouter un courrier'));
     await tester.pumpAndSettle();
-    await montrerLExemple(tester);
-    await tester.tap(find.text('Une amende'));
+    await lireUnTexte(tester);
     await tester.pumpAndSettle();
 
     expect(lecteur.recus.single, isA<CourrierTexte>());
@@ -105,8 +133,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ajouter un courrier'));
     await tester.pumpAndSettle();
-    await montrerLExemple(tester);
-    await tester.tap(find.text('Une amende'));
+    await lireUnTexte(tester);
     await tester.pumpAndSettle();
     expect(find.text('Pas de connexion au service de lecture.'), findsOneWidget);
   });
@@ -167,7 +194,7 @@ void main() {
   });
 
   testWidgets('a slow reading says the service is waking up, then goes on', (tester) async {
-    // Tall enough that the status line at the top stays built while an example at the bottom is tapped.
+    // Tall enough that the status line at the top stays built while the button at the bottom is tapped.
     await tester.binding.setSurfaceSize(const Size(420, 2000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final lecteur = _LecteurLent();
@@ -175,7 +202,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ajouter un courrier'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Une amende'));
+    await lireUnTexte(tester);
     await tester.pump();
     expect(find.text('Je lis ton courrier…'), findsOneWidget);
     await tester.pump(attenteLente + const Duration(seconds: 1));
@@ -217,7 +244,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ajouter un courrier'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Une amende'));
+    await lireUnTexte(tester);
     await tester.pumpAndSettle();
     expect(find.textContaining('La lecture a échoué'), findsOneWidget);
     expect(find.text('Je lis ton courrier…'), findsNothing, reason: 'the screen is usable again');
@@ -239,64 +266,264 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('an anonymous list can be kept with Google, same account', (tester) async {
+    Future<void> ouvrirCompte(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('Mon compte'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> continuerAvecGoogle(WidgetTester tester) async {
+      await ouvrirCompte(tester);
+      await tester.tap(find.text('Continuer avec Google'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('no card on the list: the account lives behind its button', (tester) async {
+      await accueil(tester, FauxDepot([echeance()]), FauxCompte());
+      expect(find.textContaining('Google'), findsNothing);
+      await ouvrirCompte(tester);
+      expect(find.text('Continuer avec Google'), findsOneWidget);
+      expect(find.text('Se déconnecter'), findsNothing, reason: 'leaving an anonymous account would lose its list');
+    });
+
+    testWidgets('an anonymous list stays with Google, same account', (tester) async {
       final compte = FauxCompte();
       await accueil(tester, FauxDepot([echeance()]), compte);
-      await tester.tap(find.text('Garder mes échéances avec Google'));
-      await tester.pumpAndSettle();
-      expect(compte.demandes, [false], reason: 'deadlines here: link, never replace');
-      expect(find.text('Échéances gardées avec Google'), findsOneWidget);
-      expect(find.text('Garder mes échéances avec Google'), findsNothing);
+      await continuerAvecGoogle(tester);
+      expect(compte.appels, ['connecter']);
+      expect(find.text('Compte Google connecté'), findsOneWidget);
+      expect(find.text('Continuer avec Google'), findsNothing);
     });
 
-    testWidgets('on an empty phone, Google opens the list kept elsewhere and the app restarts on it', (tester) async {
+    testWidgets('joining an existing list restarts on it, and says « added » once the server has them', (tester) async {
       var redemarrages = 0;
-      final compte = FauxCompte(resultat: ResultatGoogle.connecte);
-      await accueil(tester, FauxDepot(), compte, onCompteChange: () => redemarrages++);
-      await tester.tap(find.text('Retrouver mes échéances avec Google'));
-      await tester.pumpAndSettle();
-      expect(compte.demandes, [true]);
+      final compte = FauxCompte(resultat: ResultatGoogle.fusionEnCours);
+      await accueil(tester, FauxDepot([echeance()]), compte, onCompteChange: () => redemarrages++);
+      await continuerAvecGoogle(tester);
       expect(redemarrages, 1);
+      expect(find.text('Échéances ajoutées à ta liste'), findsOneWidget);
     });
 
-    testWidgets('two lists are never merged silently: the user is told why', (tester) async {
-      final compte = FauxCompte(erreur: const CompteImpossible('Ce compte Google a déjà sa propre liste.'));
+    testWidgets('a refused copy blocks the screen until it is retried or given up', (tester) async {
+      final compte = FauxCompte(resultat: ResultatGoogle.fusionEnCours)
+        ..fusions.clear()
+        ..fusions.addAll([false, true]);
       await accueil(tester, FauxDepot([echeance()]), compte);
-      await tester.tap(find.text('Garder mes échéances avec Google'));
+      await continuerAvecGoogle(tester);
+      expect(find.text('Échéances non ajoutées'), findsOneWidget);
+      await tester.tap(find.text('Réessayer'));
       await tester.pumpAndSettle();
-      expect(find.text('Ce compte Google a déjà sa propre liste.'), findsOneWidget);
-      expect(find.text('Garder mes échéances avec Google'), findsOneWidget, reason: 'still anonymous');
+      expect(compte.appels, ['connecter', 'relancer']);
+      expect(find.text('Échéances non ajoutées'), findsNothing);
+      expect(find.text('Échéances ajoutées à ta liste'), findsOneWidget);
+    });
+
+    testWidgets('giving up on a refused copy never announces it as added', (tester) async {
+      final compte = FauxCompte(resultat: ResultatGoogle.fusionEnCours)
+        ..fusions.clear()
+        ..fusions.add(false);
+      await accueil(tester, FauxDepot([echeance()]), compte);
+      await continuerAvecGoogle(tester);
+      await tester.tap(find.text('Abandonner'));
+      await tester.pumpAndSettle();
+      expect(find.text('Échéances ajoutées à ta liste'), findsNothing);
+    });
+
+    testWidgets('an unexpected failure is explained, the sheet does not stay stuck', (tester) async {
+      await accueil(tester, FauxDepot([echeance()]), _CompteCasse());
+      await continuerAvecGoogle(tester);
+      expect(find.text('Connexion Google impossible'), findsOneWidget);
+      expect(find.text('Continuer avec Google'), findsNothing);
+    });
+
+    testWidgets('an answer arriving while the sheet closes leaves the list in place', (tester) async {
+      final attente = Completer<void>();
+      final compte = _CompteLent(() => attente.future);
+      await accueil(tester, FauxDepot([echeance()]), compte);
+      await ouvrirCompte(tester);
+      await tester.tap(find.text('Se déconnecter'));
+      await tester.pump();
+      await tester.tapAt(const Offset(10, 10)); // Outside: the sheet starts closing.
+      await tester.pump(const Duration(milliseconds: 20));
+      attente.complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(BoutonCompte), findsOneWidget);
+    });
+
+    testWidgets('sign-out failing is explained', (tester) async {
+      await accueil(tester, FauxDepot([echeance()]), _CompteLent(() async => throw StateError('panne')));
+      await ouvrirCompte(tester);
+      await tester.tap(find.text('Se déconnecter'));
+      await tester.pumpAndSettle();
+      expect(find.text('Déconnexion impossible'), findsOneWidget);
+    });
+
+    testWidgets('a Google failure is explained and the user stays where they were', (tester) async {
+      var redemarrages = 0;
+      final compte = FauxCompte(erreur: const CompteImpossible('Réessaie.'));
+      await accueil(tester, FauxDepot([echeance()]), compte, onCompteChange: () => redemarrages++);
+      await continuerAvecGoogle(tester);
+      expect(find.text('Connexion Google impossible'), findsOneWidget);
+      expect(redemarrages, 0);
     });
 
     testWidgets('closing the Google window changes nothing', (tester) async {
       var redemarrages = 0;
       final compte = FauxCompte(resultat: ResultatGoogle.annule);
       await accueil(tester, FauxDepot([echeance()]), compte, onCompteChange: () => redemarrages++);
-      await tester.tap(find.text('Garder mes échéances avec Google'));
-      await tester.pumpAndSettle();
+      await continuerAvecGoogle(tester);
       expect(find.byType(SnackBar), findsNothing);
       expect(redemarrages, 0);
-      expect(find.text('Garder mes échéances avec Google'), findsOneWidget);
     });
 
-    testWidgets('a Google account shows where the list is kept', (tester) async {
-      await accueil(tester, FauxDepot([echeance()]), FauxCompte(estAnonyme: false, email: 'camille@exemple.fr'));
-      expect(find.text('Échéances gardées avec camille@exemple.fr.'), findsOneWidget);
-      expect(find.text('Garder mes échéances avec Google'), findsNothing);
+    testWidgets('connected: the address is only in the menu, with change and sign-out', (tester) async {
+      final compte = FauxCompte(estAnonyme: false, email: 'camille@exemple.fr');
+      await accueil(tester, FauxDepot([echeance()]), compte);
+      expect(find.textContaining('camille@exemple.fr'), findsNothing, reason: 'nothing about it on the list');
+      await ouvrirCompte(tester);
+      expect(find.text('camille@exemple.fr'), findsOneWidget);
+      expect(find.text('Changer de compte'), findsOneWidget);
+      expect(find.text('Continuer avec Google'), findsNothing);
     });
 
-    testWidgets('no account (demo): no Google card', (tester) async {
+    testWidgets('signing out and changing account restart the app on the new session', (tester) async {
+      var redemarrages = 0;
+      final compte = FauxCompte(estAnonyme: false, email: 'camille@exemple.fr', resultat: ResultatGoogle.connecte);
+      await accueil(tester, FauxDepot([echeance()]), compte, onCompteChange: () => redemarrages++);
+      await ouvrirCompte(tester);
+      await tester.tap(find.text('Changer de compte'));
+      await tester.pumpAndSettle();
+      await ouvrirCompte(tester);
+      await tester.tap(find.text('Se déconnecter'));
+      await tester.pumpAndSettle();
+      expect(compte.appels, ['changer', 'deconnecter']);
+      expect(redemarrages, 2);
+      expect(find.text('Se déconnecter'), findsNothing, reason: 'the sheet is closed');
+    });
+
+    testWidgets('no account (demo): no account button', (tester) async {
       await accueil(tester, FauxDepot([echeance()]), null);
-      expect(find.textContaining('avec Google'), findsNothing);
+      expect(find.byTooltip('Mon compte'), findsNothing);
     });
   });
 
-  testWidgets('opening the add screen wakes the backend and names who reads the letter', (tester) async {
+  testWidgets('every way to add a letter is in the sheet, over the list', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(420, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(appli(FauxDepot([echeance()])));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ajouter un courrier'));
+    await tester.pumpAndSettle();
+    for (final option in ['Importer un courrier', 'Coller le texte', 'Saisir à la main']) {
+      expect(find.text(option), findsOneWidget, reason: option);
+    }
+    expect(
+      find.descendant(of: find.byType(FeuilleAjout), matching: find.byType(Choix)),
+      findsNWidgets(3),
+      reason: 'the sources live in the import menu',
+    );
+    expect(
+      find.text('Payer l\'amende', skipOffstage: false),
+      findsOneWidget,
+      reason: 'the list stays behind the sheet',
+    );
+    expect(find.text('Une amende'), findsNothing, reason: 'fictional letters are for the demo only');
+  });
+
+  group('import menu', () {
+    const canalPhotos = MethodChannel('plugins.flutter.io/image_picker');
+
+    /// Opens the menu from the sheet. Records what is asked of the image picker, which answers with `reponse`.
+    Future<List<MethodCall>> ouvrirMenu(WidgetTester tester, {Future<Object?> Function()? reponse}) async {
+      final appels = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(canalPhotos, (appel) async {
+        appels.add(appel);
+        return reponse?.call();
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(canalPhotos, null));
+      await tester.binding.setSurfaceSize(const Size(420, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(appli(FauxDepot()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ajouter un courrier'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Importer un courrier'));
+      await tester.pumpAndSettle();
+      return appels;
+    }
+
+    testWidgets('offers the three sources, and cancelling starts nothing', (tester) async {
+      final appels = await ouvrirMenu(tester);
+      for (final option in ['Prendre une photo', 'Choisir dans mes photos', 'Choisir un fichier']) {
+        expect(find.text(option), findsOneWidget, reason: option);
+      }
+      await tester.tap(find.text('Annuler'));
+      await tester.pumpAndSettle();
+      expect(find.text('Prendre une photo'), findsNothing);
+      expect(find.text('Coller le texte'), findsOneWidget, reason: 'back on the sheet');
+      expect(appels, isEmpty);
+    });
+
+    for (final (option, source) in [('Prendre une photo', 0), ('Choisir dans mes photos', 1)]) {
+      testWidgets('$option opens the right source, once the menu is closed', (tester) async {
+        final appels = await ouvrirMenu(tester);
+        await tester.tap(find.text(option));
+        await tester.pumpAndSettle();
+        expect(find.text(option), findsNothing);
+        expect(appels.single.arguments['source'], source);
+        expect(find.text('Coller le texte'), findsOneWidget, reason: 'cancelling the picker keeps the sheet');
+      });
+    }
+
+    testWidgets('a source that fails says so on the sheet', (tester) async {
+      await ouvrirMenu(tester, reponse: () async => throw PlatformException(code: 'camera_access_denied'));
+      await tester.tap(find.text('Prendre une photo'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Impossible d\'ouvrir ce fichier'), findsOneWidget);
+    });
+  });
+
+  testWidgets('tapping outside a field closes the keyboard', (tester) async {
+    await tester.pumpWidget(appli(FauxDepot(), lecteur: FauxLecteur(reponse: lecture())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ajouter un courrier'));
+    await tester.pumpAndSettle();
+    await montrerDansLaFeuille(tester, find.text('Saisir à la main'));
+    await tester.tap(find.text('Saisir à la main'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(TextField).first);
+    await tester.pump();
+    expect(tester.testTextInput.isVisible, isTrue);
+    await tester.tapAt(const Offset(4, 300));
+    await tester.pump();
+    await tester.pump();
+    expect(tester.testTextInput.isVisible, isFalse);
+  });
+
+  testWidgets('a notice with an action still leaves by itself', (tester) async {
+    await tester.pumpWidget(appli(FauxDepot([echeance()])));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Payer l\'amende'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('C\'est fait'));
+    await tester.pumpAndSettle();
+    expect(find.text('Marqué comme fait'), findsOneWidget);
+    expect(find.text('Annuler'), findsOneWidget);
+    final enPlace = tester.getTopLeft(find.text('Marqué comme fait')).dy;
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(tester.getTopLeft(find.text('Marqué comme fait')).dy, greaterThan(enPlace), reason: 'it leaves downwards');
+    await tester.pumpAndSettle();
+    expect(find.text('Marqué comme fait'), findsNothing);
+  });
+
+  testWidgets('opening the add sheet wakes the backend and names who reads the letter', (tester) async {
     final lecteur = FauxLecteur();
     await tester.pumpWidget(
       MaterialApp(
         theme: themePli(),
-        home: EcranAjout(depot: FauxDepot(), lecteur: lecteur, maintenant: () => aujourdhui),
+        home: Scaffold(
+          body: FeuilleAjout(depot: FauxDepot(), lecteur: lecteur, maintenant: () => aujourdhui),
+        ),
       ),
     );
     await tester.pump();
@@ -310,8 +537,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ajouter un courrier'));
     await tester.pumpAndSettle();
-    await montrerLExemple(tester);
-    await tester.tap(find.text('Une amende'));
+    await lireUnTexte(tester);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Enregistrer l\'échéance'));
     await tester.pump();
@@ -436,8 +662,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ajouter un courrier'));
     await tester.pumpAndSettle();
-    await montrerLExemple(tester);
-    await tester.tap(find.text('Une amende'));
+    await lireUnTexte(tester);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Compris'));
     await tester.pumpAndSettle();
@@ -453,6 +678,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ajouter un courrier'));
     await tester.pumpAndSettle();
+    await montrerDansLaFeuille(tester, find.text('Saisir à la main'));
     await tester.tap(find.text('Saisir à la main'));
     await tester.pumpAndSettle();
     expect(find.text('CE QUE PLI A LU'), findsNothing);
