@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -168,6 +169,31 @@ class _FeuilleAjoutState extends State<FeuilleAjout> {
     return photo == null ? null : CourrierFichier(mediaType: 'image/jpeg', octets: await photo.readAsBytes());
   });
 
+  /// A browser's file picker already offers the sources on a phone. Elsewhere, the app asks through this menu.
+  Future<void> _choisirSource() async {
+    if (kIsWeb) return _importer();
+    final choisir = await showCupertinoModalPopup<Future<void> Function()>(
+      context: context,
+      builder: (menu) {
+        Widget option(String titre, Future<void> Function() action) =>
+            CupertinoActionSheetAction(onPressed: () => Navigator.of(menu).pop(action), child: Text(titre));
+        return CupertinoActionSheet(
+          actions: [
+            option('Prendre une photo', () => _choisirImage(ImageSource.camera)),
+            option('Choisir dans mes photos', () => _choisirImage(ImageSource.gallery)),
+            option('Choisir un fichier', _importer),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(menu).pop(),
+            child: const Text('Annuler'),
+          ),
+        );
+      },
+    );
+    if (mounted) await choisir?.call();
+  }
+
   String get _consigne {
     if (_enCours) return _lent ? 'Le service se réveille, ça peut prendre une minute…' : 'Je lis ton courrier…';
     if (Config.demo) {
@@ -201,25 +227,11 @@ class _FeuilleAjoutState extends State<FeuilleAjout> {
                     Text(_consigne, style: Textes.discret),
                     if (_erreur != null) ...[const SizedBox(height: Espaces.m), _Alerte(texte: _erreur!)],
                     const SizedBox(height: Espaces.m),
-                    if (!kIsWeb) ...[
-                      Choix(
-                        emoji: '📸',
-                        titre: 'Prendre une photo',
-                        detail: 'Le courrier à plat, bien éclairé',
-                        onTap: () => _choisirImage(ImageSource.camera),
-                      ),
-                      Choix(
-                        emoji: '🖼️',
-                        titre: 'Choisir dans mes photos',
-                        detail: 'Une photo ou une capture d\'écran',
-                        onTap: () => _choisirImage(ImageSource.gallery),
-                      ),
-                    ],
                     Choix(
                       emoji: '📄',
-                      titre: kIsWeb ? 'Importer un PDF ou une image' : 'Importer un fichier',
-                      detail: kIsWeb ? '5 Mo maximum' : 'PDF ou image, 5 Mo maximum',
-                      onTap: _importer,
+                      titre: 'Importer un courrier',
+                      detail: 'Photo ou PDF, 5 Mo maximum',
+                      onTap: _choisirSource,
                     ),
                     Choix(
                       emoji: '📋',

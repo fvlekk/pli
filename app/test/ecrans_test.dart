@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:pli/app.dart';
@@ -14,6 +15,7 @@ import 'package:pli/services/depot_echeances.dart';
 import 'package:pli/services/lecteur_courrier.dart';
 import 'package:pli/services/session.dart';
 import 'package:pli/theme.dart';
+import 'package:pli/widgets/choix.dart';
 
 import 'faux.dart';
 
@@ -411,21 +413,73 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ajouter un courrier'));
     await tester.pumpAndSettle();
-    for (final option in [
-      'Prendre une photo',
-      'Choisir dans mes photos',
-      'Importer un fichier',
-      'Coller le texte',
-      'Saisir à la main',
-    ]) {
+    for (final option in ['Importer un courrier', 'Coller le texte', 'Saisir à la main']) {
       expect(find.text(option), findsOneWidget, reason: option);
     }
+    expect(
+      find.descendant(of: find.byType(FeuilleAjout), matching: find.byType(Choix)),
+      findsNWidgets(3),
+      reason: 'the sources live in the import menu',
+    );
     expect(
       find.text('Payer l\'amende', skipOffstage: false),
       findsOneWidget,
       reason: 'the list stays behind the sheet',
     );
     expect(find.text('Une amende'), findsNothing, reason: 'fictional letters are for the demo only');
+  });
+
+  group('import menu', () {
+    const canalPhotos = MethodChannel('plugins.flutter.io/image_picker');
+
+    /// Opens the menu from the sheet. Records what is asked of the image picker, which answers with `reponse`.
+    Future<List<MethodCall>> ouvrirMenu(WidgetTester tester, {Future<Object?> Function()? reponse}) async {
+      final appels = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(canalPhotos, (appel) async {
+        appels.add(appel);
+        return reponse?.call();
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(canalPhotos, null));
+      await tester.binding.setSurfaceSize(const Size(420, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(appli(FauxDepot()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ajouter un courrier'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Importer un courrier'));
+      await tester.pumpAndSettle();
+      return appels;
+    }
+
+    testWidgets('offers the three sources, and cancelling starts nothing', (tester) async {
+      final appels = await ouvrirMenu(tester);
+      for (final option in ['Prendre une photo', 'Choisir dans mes photos', 'Choisir un fichier']) {
+        expect(find.text(option), findsOneWidget, reason: option);
+      }
+      await tester.tap(find.text('Annuler'));
+      await tester.pumpAndSettle();
+      expect(find.text('Prendre une photo'), findsNothing);
+      expect(find.text('Coller le texte'), findsOneWidget, reason: 'back on the sheet');
+      expect(appels, isEmpty);
+    });
+
+    for (final (option, source) in [('Prendre une photo', 0), ('Choisir dans mes photos', 1)]) {
+      testWidgets('$option opens the right source, once the menu is closed', (tester) async {
+        final appels = await ouvrirMenu(tester);
+        await tester.tap(find.text(option));
+        await tester.pumpAndSettle();
+        expect(find.text(option), findsNothing);
+        expect(appels.single.arguments['source'], source);
+        expect(find.text('Coller le texte'), findsOneWidget, reason: 'cancelling the picker keeps the sheet');
+      });
+    }
+
+    testWidgets('a source that fails says so on the sheet', (tester) async {
+      await ouvrirMenu(tester, reponse: () async => throw PlatformException(code: 'camera_access_denied'));
+      await tester.tap(find.text('Prendre une photo'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Impossible d\'ouvrir ce fichier'), findsOneWidget);
+    });
   });
 
   testWidgets('tapping outside a field closes the keyboard', (tester) async {
