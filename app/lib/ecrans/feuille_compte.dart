@@ -6,6 +6,7 @@ import '../services/session.dart';
 import '../theme.dart';
 import '../widgets/choix.dart';
 import '../widgets/notification.dart';
+import 'confidentialite.dart';
 
 /// The account button of the home screen: the first letter of the address once connected, a silhouette before.
 class BoutonCompte extends StatefulWidget {
@@ -149,13 +150,66 @@ class _FeuilleCompteState extends State<_FeuilleCompte> {
     }
   }
 
+  /// Asks first: nothing can bring the list back. The app then restarts on a new, empty session.
+  Future<void> _supprimer() async {
+    final compte = widget.compte;
+    final confirme = await showDialog<bool>(
+      context: context,
+      builder: (dialogue) => AlertDialog(
+        title: const Text('Supprimer tes données ?'),
+        content: Text(
+          compte.estAnonyme
+              ? 'Toutes tes échéances seront effacées, pour de bon.'
+              : 'Toutes tes échéances et ton compte Pli seront effacés, pour de bon. Google va te demander de '
+                    'confirmer ton compte.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogue, false), child: const Text('Annuler')),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Couleurs.rouge),
+            onPressed: () => Navigator.pop(dialogue, true),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      ),
+    );
+    if (confirme != true || !mounted) return;
+    final messager = ScaffoldMessenger.of(context);
+    final navigateur = Navigator.of(context);
+    final route = ModalRoute.of(context)!;
+    void fermer() {
+      if (route.isCurrent) navigateur.pop();
+    }
+
+    setState(() => _enCours = true);
+    try {
+      final fait = await compte.supprimerMesDonnees();
+      fermer();
+      if (!fait) return;
+      notifier(messager, 'Tes données sont supprimées');
+      widget.onCompteChange?.call();
+    } on CompteImpossible catch (e) {
+      fermer();
+      notifier(
+        messager,
+        'Suppression impossible',
+        detail: e.message,
+        ton: TonNotification.alerte,
+        duree: const Duration(seconds: 8),
+      );
+    } catch (_) {
+      fermer();
+      notifier(messager, 'Suppression impossible', detail: 'Réessaie dans un instant.', ton: TonNotification.alerte);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final compte = widget.compte;
     return SafeArea(
       child: AbsorbPointer(
         absorbing: _enCours,
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(Espaces.l, 0, Espaces.l, Espaces.m),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -192,6 +246,19 @@ class _FeuilleCompteState extends State<_FeuilleCompte> {
                   onTap: _deconnecter,
                 ),
               ],
+              Choix(
+                emoji: '🔒',
+                titre: 'Confidentialité',
+                detail: 'Ce que Pli fait de tes courriers.',
+                onTap: () =>
+                    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const EcranConfidentialite())),
+              ),
+              Choix(
+                emoji: '🗑️',
+                titre: 'Supprimer mes données',
+                detail: 'Tes échéances, pour de bon.',
+                onTap: _supprimer,
+              ),
             ],
           ),
         ),

@@ -51,6 +51,15 @@ def test_daily_limits_have_defaults(monkeypatch):
     assert Config.depuis_env().requetes_par_jour_instance == 500
 
 
+def test_ip_limits_have_defaults_and_read_the_connection_unless_told(monkeypatch):
+    for nom in ("PLI_REQUETES_PAR_MINUTE_IP", "PLI_REQUETES_PAR_JOUR_IP", "PLI_ENTETE_IP"):
+        monkeypatch.delenv(nom, raising=False)
+    config = Config.depuis_env()
+    assert (config.requetes_par_minute_ip, config.requetes_par_jour_ip, config.entete_ip) == (15, 60, "")
+    monkeypatch.setenv("PLI_ENTETE_IP", " True-Client-IP ")
+    assert Config.depuis_env().entete_ip == "True-Client-IP"
+
+
 def test_app_check_is_required_unless_told_otherwise(monkeypatch):
     monkeypatch.delenv("PLI_APP_CHECK", raising=False)
     monkeypatch.delenv("PLI_AUTH_EMULATEUR", raising=False)
@@ -70,6 +79,7 @@ def test_degraded_production_settings_are_logged_at_startup(monkeypatch, capsys)
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_AUTH_TOKEN",
         "PLI_AUTH_EMULATEUR",
+        "RENDER",
     ):
         monkeypatch.delenv(nom, raising=False)
     monkeypatch.delenv("PLI_EXTRACTEUR", raising=False)
@@ -80,3 +90,15 @@ def test_degraded_production_settings_are_logged_at_startup(monkeypatch, capsys)
     assert "App Check" in journal
     assert "extracteur" in journal
     assert journal.count('"WARNING"') == 2
+
+
+def test_render_without_the_proxy_ip_header_is_logged_at_startup(monkeypatch, capsys):
+    for nom in ("FIREBASE_AUTH_EMULATOR_HOST", "PLI_AUTH_EMULATEUR", "PLI_ENTETE_IP"):
+        monkeypatch.delenv(nom, raising=False)
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.setenv("PLI_PROJET_FIREBASE", "demo-pli")
+    creer_app_depuis_env()
+    assert "PLI_ENTETE_IP" in capsys.readouterr().out
+    monkeypatch.setenv("PLI_ENTETE_IP", "True-Client-IP")
+    creer_app_depuis_env()
+    assert "PLI_ENTETE_IP" not in capsys.readouterr().out

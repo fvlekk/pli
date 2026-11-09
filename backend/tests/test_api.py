@@ -379,3 +379,57 @@ def test_an_images_real_type_wins_over_the_declared_one(client, extracteur):
     jpeg = b"\xff\xd8\xff\xe0 reste"
     assert client.post("/v1/extractions", json=image(jpeg), headers=AUTH).status_code == 200
     assert extracteur.appels[0][0].media_type == "image/jpeg"
+
+
+def test_one_address_cycling_fresh_accounts_gets_a_429(extracteur):
+    client = client_avec(extracteur, requetes_par_minute_ip=2, entete_ip="True-Client-IP")
+    ip = {"True-Client-IP": "203.0.113.7"}
+    for i in range(2):
+        entetes = {"Authorization": f"Bearer ok-anonyme-{i}", **ip}
+        assert client.post("/v1/extractions", json=COURRIER, headers=entetes).status_code == 200
+    bloque = {"Authorization": "Bearer ok-anonyme-9", **ip}
+    assert client.post("/v1/extractions", json=COURRIER, headers=bloque).status_code == 429
+    ailleurs = {"Authorization": "Bearer ok-anonyme-9", "True-Client-IP": "198.51.100.1"}
+    assert client.post("/v1/extractions", json=COURRIER, headers=ailleurs).status_code == 200
+
+
+def test_ipv6_clients_are_counted_by_their_64_prefix(extracteur):
+    client = client_avec(extracteur, requetes_par_minute_ip=1, entete_ip="True-Client-IP")
+    premier = {**AUTH, "True-Client-IP": "2001:db8:1:2::1"}
+    assert client.post("/v1/extractions", json=COURRIER, headers=premier).status_code == 200
+    voisin = {"Authorization": "Bearer ok-bob", "True-Client-IP": "2001:db8:1:2:ffff::9"}
+    assert client.post("/v1/extractions", json=COURRIER, headers=voisin).status_code == 429
+
+
+def test_daily_limit_per_address(extracteur):
+    client = client_avec(extracteur, requetes_par_jour_ip=1, entete_ip="True-Client-IP")
+    ip = {"True-Client-IP": "203.0.113.7"}
+    assert client.post("/v1/extractions", json=COURRIER, headers={**AUTH, **ip}).status_code == 200
+    autre = {"Authorization": "Bearer ok-bob", **ip}
+    reponse = client.post("/v1/extractions", json=COURRIER, headers=autre)
+    assert reponse.status_code == 429
+    assert "demain" in reponse.json()["detail"]
+
+
+def test_a_missing_proxy_header_leaves_the_other_limits_and_is_logged(extracteur, capsys):
+    client = client_avec(extracteur, requetes_par_minute_ip=1, entete_ip="True-Client-IP")
+    for nom in ("alice", "bob"):
+        entetes = {"Authorization": f"Bearer ok-{nom}"}
+        assert client.post("/v1/extractions", json=COURRIER, headers=entetes).status_code == 200
+    assert journal_extraction(capsys)["ip"] == "absente"
+
+
+def test_the_address_is_never_logged(extracteur, capsys):
+    client = client_avec(extracteur, entete_ip="True-Client-IP")
+    client.post("/v1/extractions", json=COURRIER, headers={**AUTH, "True-Client-IP": "203.0.113.7"})
+    sortie = capsys.readouterr().out
+    assert "203.0.113" not in sortie
+    assert '"ip": "connue"' in sortie
+
+
+def test_a_client_cannot_pick_its_address_through_another_header(extracteur):
+    client = client_avec(extracteur, requetes_par_minute_ip=1, entete_ip="True-Client-IP")
+    ip = {"True-Client-IP": "203.0.113.7"}
+    assert client.post("/v1/extractions", json=COURRIER, headers={**AUTH, **ip}).status_code == 200
+    ruse = {"Authorization": "Bearer ok-bob", "X-Forwarded-For": "198.51.100.1", **ip}
+    assert client.post("/v1/extractions", json=COURRIER, headers=ruse).status_code == 429

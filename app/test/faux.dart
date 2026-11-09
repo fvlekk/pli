@@ -128,6 +128,17 @@ class FauxCompte implements Compte {
   @override
   Future<void> deconnecter() async => appels.add('deconnecter');
 
+  /// What « Supprimer mes données » answers: true done, false cancelled; [erreurSuppression] wins.
+  bool suppression = true;
+  CompteImpossible? erreurSuppression;
+
+  @override
+  Future<bool> supprimerMesDonnees() async {
+    appels.add('supprimer');
+    if (erreurSuppression != null) throw erreurSuppression!;
+    return suppression;
+  }
+
   @override
   Future<bool> finFusion() async => fusions.first;
 

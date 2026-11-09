@@ -9,10 +9,11 @@ abstract interface class DepotEcheances {
   Future<void> supprimer(String id);
 }
 
-/// An account's deadlines, read and copied when a device's list joins a Google account's list.
+/// An account's deadlines, read and copied when a device's list joins a Google account's list, erased with the account.
 abstract interface class ListeDeCompte {
   Future<List<Echeance>> lister();
   Future<void> reprendre(List<Echeance> echeances);
+  Future<void> effacer();
 }
 
 /// Without network, an empty cache at the start is not an empty list: wait rather than say there is nothing to do.
@@ -53,6 +54,20 @@ class DepotFirestore implements DepotEcheances, ListeDeCompte {
   Future<List<Echeance>> lister() async {
     final s = await _echeances.get();
     return [for (final d in s.docs) Echeance.depuisFirestore(d.id, d.data())];
+  }
+
+  /// Reads the server, not this device's cache: a deadline the cache never saw must go too. Throws offline.
+  /// One batch holds 500 writes.
+  @override
+  Future<void> effacer() async {
+    final docs = (await _echeances.get(const GetOptions(source: Source.server))).docs;
+    for (var debut = 0; debut < docs.length; debut += 500) {
+      final lot = _db.batch();
+      for (final d in docs.skip(debut).take(500)) {
+        lot.delete(d.reference);
+      }
+      await lot.commit();
+    }
   }
 
   /// Safe to run again after a refusal: a copy keeps the deadline's id, and what is already there is not rewritten.

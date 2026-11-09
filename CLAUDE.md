@@ -77,11 +77,15 @@ reCAPTCHA scores headless browsers as bots, so the app stops at its start screen
   JSON schema validated by pydantic. A letter that says "ignore your instructions" is an eval case.
 - **The backend stores nothing.** It never logs letter content, only a hash of the uid, sizes, timings and token counts.
   The user confirms the extraction in the app, and the app writes it to Firestore.
+- **The privacy notice tells the truth.** `app/lib/ecrans/confidentialite.dart` says what leaves the phone, to whom,
+  and what is kept how long. A new provider, a new stored field or a new retention changes it in the same MR.
+  « Supprimer mes données » erases the deadlines, then the account (`Session.supprimerMesDonnees`).
 - **Users only see their own data.** Firestore path `users/{uid}/echeances/{id}`; rules check `request.auth.uid == uid`
   and the document's shape. Any rules change comes with a rules test.
-- Every backend route except `/healthz` requires a valid Firebase ID token, and is rate limited per uid and per
-  instance (anonymous accounts are free to create: the per-uid limit alone caps nothing), per minute and per day. The
-  counters are in memory and a restart resets them: the real bound on a day's cost is the provider's spend limit.
+- Every backend route except `/healthz` requires a valid Firebase ID token, and is rate limited per uid, per
+  client IP and per instance (anonymous accounts are free to create: the per-uid limit alone caps nothing), per minute
+  and per day. Behind a proxy the IP comes from `PLI_ENTETE_IP`; when that header is missing only the other limits hold,
+  and the log says `ip: absente`. The counters are in memory and a restart resets them: the real bound on a day's cost is the provider's spend limit.
   The token is checked and the limits applied before the body is read; readings in progress at once are capped too.
 - Text limits are the same in `schema.py`, `firestore.rules` and the app (titre/organismeNom 120, resume 500).
   Change one, change all three, or the user cannot save.
